@@ -1,5 +1,5 @@
 #ifndef lint
-static char *RCSid() { return RCSid("$Id: graph3d.c,v 1.344 2016-07-29 18:28:01 sfeam Exp $"); }
+static char *RCSid() { return RCSid("$Id: graph3d.c,v 1.347 2016-09-13 18:51:08 sfeam Exp $"); }
 #endif
 
 /* GNUPLOT - graph3d.c */
@@ -95,6 +95,7 @@ float surface_scale = 1.0;
 float surface_zscale = 1.0;
 float surface_lscale = 0.0;
 float mapview_scale = 1.0;
+float azimuth = 0.0;
 
 /* Set by 'set view map': */
 int splot_map = FALSE;
@@ -638,10 +639,11 @@ do_3dplot(
     mat_scale(surface_scale / 2.0, surface_scale / 2.0, surface_scale / 2.0, mat);
     mat_mult(trans_mat, trans_mat, mat);
 
-    /* The extrema need to be set even when a surface is not being
-     * drawn.   Without this, gnuplot used to assume that the X and
-     * Y axis started at zero.   -RKC
-     */
+    /* The azimuth is applied as a rotation about the line of sight */
+    if (azimuth !=0 && !splot_map) {
+	mat_rot_z(azimuth, mat);
+	mat_mult(trans_mat, trans_mat, mat);
+    }
 
     if (polar)
 	int_error(NO_CARET,"Cannot splot in polar coordinate system.");
@@ -806,7 +808,7 @@ do_3dplot(
      * difference for other terminals.  If it causes problems, then we will need
      * a separate BoundingBox structure to track the actual 3D graph box.
      */
-    else {
+    else if (azimuth == 0) {
 	int xl, xb, xr, xf, yl, yb, yr, yf;
 
 	map3d_xy(zaxis_x, zaxis_y, base_z, &xl, &yl);
@@ -820,7 +822,6 @@ do_3dplot(
     /* PLACE TITLE */
     if (title.text != 0) {
 	unsigned int x, y;
-	int tmpx, tmpy;
 	if (splot_map) { /* case 'set view map' */
 	    int map_x1, map_y1, map_x2, map_y2;
 	    int tics_len = 0;
@@ -832,24 +833,18 @@ do_3dplot(
 	    map3d_xy(X_AXIS.max, Y_AXIS.max, base_z, &map_x2, &map_y2);
 	    /* Distance between the title base line and graph top line or the upper part of
 	       tics is as given by character height: */
-	    map3d_position_r(&(title.offset), &tmpx, &tmpy, "3dplot");
 #define DEFAULT_Y_DISTANCE 1.0
-	    x = (unsigned int) ((map_x1 + map_x2) / 2 + tmpx);
-	    y = (unsigned int) (map_y1 + tics_len + tmpy + (DEFAULT_Y_DISTANCE + titlelin - 0.5) * (t->v_char));
+	    x = (unsigned int) ((map_x1 + map_x2) / 2);
+	    y = (unsigned int) (map_y1 + tics_len + (DEFAULT_Y_DISTANCE + titlelin - 0.5) * (t->v_char));
 #undef DEFAULT_Y_DISTANCE
 	} else { /* usual 3d set view ... */
-	    map3d_position_r(&(title.offset), &tmpx, &tmpy, "3dplot");
-	    x = (unsigned int) ((plot_bounds.xleft + plot_bounds.xright) / 2 + tmpx);
-	    y = (unsigned int) (plot_bounds.ytop + tmpy + titlelin * (t->h_char));
+	    x = (unsigned int) ((plot_bounds.xleft + plot_bounds.xright) / 2);
+	    y = (unsigned int) (plot_bounds.ytop + titlelin * (t->h_char));
 	}
-	ignore_enhanced(title.noenhanced);
-	apply_pm3dcolor(&(title.textcolor));
-	/* PM: why there is JUST_TOP and not JUST_BOT? We should draw above baseline!
-	 * But which terminal understands that? It seems vertical justification does
-	 * not work... */
-	write_multiline(x, y, title.text, CENTRE, JUST_TOP, 0, title.font);
+
+	/* NB: write_label applies text color but does not reset it */
+	write_label(x, y, &title);
 	reset_textcolor(&(title.textcolor));
-	ignore_enhanced(FALSE);
     }
 
     /* PLACE TIMEDATE */
@@ -2089,7 +2084,18 @@ setup_3d_box_corners()
 	front_x  = X_AXIS.max;
     }
 
-    if (surface_rot_x > 90) {
+    quadrant = surface_rot_x / 90;
+    if (quadrant & 2) {
+	double temp;
+	temp = front_y;
+	front_y = back_y;
+	back_y = temp;
+	temp = front_x;
+	front_x = back_x;
+	back_x = temp;
+    }
+
+    if ((quadrant + 1) & 2) {
 	/* labels on the back axes */
 	yaxis_x = back_x;
 	xaxis_y = back_y;

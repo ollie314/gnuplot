@@ -1,5 +1,5 @@
 #ifndef lint
-static char *RCSid() { return RCSid("$Id: graphics.c,v 1.529 2016-07-05 20:47:44 sfeam Exp $"); }
+static char *RCSid() { return RCSid("$Id: graphics.c,v 1.531 2016-08-22 18:44:22 sfeam Exp $"); }
 #endif
 
 /* GNUPLOT - graphics.c */
@@ -289,6 +289,8 @@ place_arrows(int layer)
 	int sx, sy, ex, ey;
 
 	if (this_arrow->arrow_properties.layer != layer)
+	    continue;
+	if (this_arrow->type == arrow_end_undefined)
 	    continue;
 	get_arrow(this_arrow, &sx, &sy, &ex, &ey);
 
@@ -770,8 +772,6 @@ do_plot(struct curve_points *plots, int pcount)
 		    plot_betweencurves(this_plot);
 		} else {
 		    plot_filledcurves(this_plot);
-		    if (need_fill_border(&this_plot->fill_properties))
-			plot_lines(this_plot);
 		}
 		break;
 
@@ -1261,6 +1261,13 @@ plot_filledcurves(struct curve_points *plot)
     }
 
     finish_filled_curve(points, corners, plot);
+
+    /* If the fill style has a border and this is a closed curve then	*/
+    /* retrace the boundary.  Otherwise ignore "border" property.	*/
+    if (plot->filledcurves_options.closeto == FILLEDCURVES_CLOSED
+    &&  need_fill_border(&plot->fill_properties)) {
+	plot_lines(plot);
+    }
 }
 
 /*

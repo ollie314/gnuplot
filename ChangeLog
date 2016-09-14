@@ -1,8 +1,491 @@
+2016-09-13  Ethan A Merritt  <merritt@u.washington.edu>
+
+	*src/boundary.c src/graph3d.c src/set.c:  Write plot titles using the 
+	general routine write_label() rather than in-line code.  This allows
+	support for additional text properties, in particular "boxed".
+
+2016-09-12  Bastian Maerkisch  <bmaerkisch@web.de>
+
+	* src/mouse.c:  Change mouse pointer to indicate rotation during azimuth
+	change via mouse.  Add a help text for dragging with mouse button 3.
+
+	* src/mouse.c:  Revert mouse pointer to normal when enabling/disabling
+	mouse mode.
+
+	* src/win/wgraph.c (GraphInit):  Do not set an (automatic) window class
+	mouse pointer.  As we set the pointer ourselves as required, that caused
+	flickering of the mouse pointer.
+
+	* src/win/wtext.c:  Change mouse pointer while marking text.
+
+	* src/term/cairo.trm (cairotrm_init):  Redirection of output to a 
+	printer on Windows requires the use of gpoutfile.  Let pdfcairo on 
+	Windows always use the cairostream_write callback to enable printing
+	of PDF files.
+
+	* src/win/winmain.c (open_printer):  Open temporary file in binary mode
+	as required e.g. for PDF data.
+
+	* src/win/wgnuplib.rc src/win/wgraph.c (CopyPrint) src/win/wprinter.c
+	(DumpPrinter):  Remove unused lower part of the "general" print
+	property sheet by supplying an (empty) dialog template.  Add a note 
+	that printer settings will be ignored since the PRN file mechanism
+	sends terminal output to the printer unaltered.
+
+2016-09-11  Bastian Maerkisch  <bmaerkisch@web.de>
+
+	* src/win/wprinter.c:  Previous change failed to apply default size
+	when not the corresponding property sheet was not shown.
+
+	* src/win/winmain.c (close_printer):  The code relied on a windows
+	terminal graph window being opened, but should not.  Always supply a
+	valid window handle to DumpPrinter().  Include the current terminal
+	name in the print job title.
+
+	* src/win/wprinter (DumpPrinter):  The Escape() PASSTHROUGH function
+	was included in Windows 3(!) for backward compatibility with earlier
+	versions and is no longer supported by some printer drivers.  Make
+	use of the appropriate printer spooler API instead.  For constistency,
+	use a print property sheet instead of a print-setup dialog here too.
+
+2016-09-10  Ethan A Merritt  <merritt@u.washington.edu>
+
+	* src/graph3d.c src/graph3d.h src/mouse.c src/save.c src/set.c
+	src/show.c src/unset.c src/eval.c docs/gnuplot.doc demo/azimuth.dem:
+
+	New command "set view azimuth <angle-in-degrees>"
+	Changing the view angles rot_x and rot_z cannot move the z axis out of
+	the plane normal to the canvas horizontal. This patch adds a new angular
+	setting "azimuth" that rotates the plane containing the z axis about
+	the line of sight.  I.e. "set view azimuth 90" places the z axis 
+	parallel to the canvas horizontal rather than the canvas vertical.
+	Click-and-drag with right mouse button provides interactive control of
+	the azimuth.  Azimuth is ignored by 2D plots and by "set view map".
+
+2016-09-09  Shigeharu Takeno  <shige@iee.niit.ac.jp>
+
+	* docs/term-ja.diff docs/gnuplot-ja.doc:
+	Sync Japanese documentation to doc version 1.1017
+
+2016-09-08  Tatsuro MATSUOKA  <tmacchant3@yahoo.co.jp>
+
+	* src/win/wgnuplot.exe.manifest src/win/wgnuplot.exe.manifest64:  Add
+	compatibility flags vor Windows 7, 8, 8.1, and 10 to enable proper
+	detection of the Windows version.
+	Bug #1851
+
+2016-09-08  Bastian Maerkisch  <bmaerkisch@web.de>
+
+	* src/win/wgraph.c src/win/winmain.c src/win/wprinter.c
+	src/win/wcommon.h src/win/wgnuplib.h src/win/wgnuplib.rc:
+	Replace the deprecated old-style print-setup dialog (which was shown
+	when the user requests the windows terminal to print) by a print
+	property sheet.  Integrate the previously separate dialog to request
+	the print size.  This sadly requires quite a bit of code to implement
+	a COM callback object.  Also we now properly clean-up printing
+	resources.
+
+	* src/eval.c:  Windows 10 also deprecated the VerifyVersionInfo API
+	which is used by the external findversion.h, as well as GetVersionEx.
+	Since the above patch fixes GetVersionEx's behaviour on all current
+	Windows versions, there's no need to rely on findversion.h any more.
+	See Feature Request 422
+
+	* config/mingw/Makefile:  Resource target depends on manifest files.
+
+2016-09-07  Ethan A Merritt  <merritt@u.washington.edu>
+
+	* term/pslatex.trm:  For pslatex, epslatex, cairolatex "standalone"
+	option, if the current encoding is utf8 then put a line in the output
+	/usepackage[utf8x]{inputenc}
+	Note that [utf8x] (not [utf8]) is needed to correctly process the 
+	degree sign and micro characters.
+
+2016-09-07  Bastian Maerkisch  <bmaerkisch@web.de>
+
+	* src/win/wgraph.c src/win/wtext.c:  Ensure proper initalisation of the
+	font chooser dialog also on non-english systems by using the LOGFONT
+	fields to request bold or italic fonts instead of using strings.
+	Request scalable fonts only, to ensure fonts can be scaled or rotated,
+	or offer (some) Unicode characters.
+
+2016-09-06  Daniel J Sebald <daniel.sebald@ieee.org>
+
+	* src/graph3d.c (setup_3d_box_corners): Add quandrant processing for
+	surface_rot_x similar to that for surface_rot_z.  This fixes
+	inconsistent splot borders drawn when the base is upside down.
+	Bug #1810
+
+2016-09-06  Ethan A Merritt  <merritt@u.washington.edu>
+
+	* src/stats.c: In the case of 'stats foo prefix columnhead' check that
+	the string found in the column header is a legal identifier (i.e. rule
+	out numbers and punctuation).
+
+2016-09-05  Ethan A Merritt  <merritt@u.washington.edu>
+
+	* src/tabulate.c( imploded ): The smoothing routine cp_implode()
+	creates a new set of plots separated by dummy UNDEFINED points.
+	However data files use a blank line to separate curves.  Thus
+	  "set table foo; plot ... smooth freq"
+	creates a file foo that is not in standard format, creating problems
+	if it is read back in to plot later.  This patch replaces each
+	UNDEFINED point with a blank line when smoothed data is tabulated.
+	Bug #1274
+
+2016-09-03  Ethan A Merritt  <merritt@u.washington.edu>
+
+	* src/datafile.c term/svg.trm:  Remove dead code and comments.
+
+	* src/stats.c:  Track and report number of lines treated as column 
+	headers rather than as data.
+
+	* src/show.c:  Show state of 'autotitle columnheaders' even if the key
+	is currently unset.
+
+	* docs/gnuplot.doc:  Update sections referring to columnheaders.
+	Note that the effect of `set key autotitle columnhead` extends to
+	stats and fit commands, and applies even if the key is unset.
+
+	* src/datafile.c (df_open):  Guarantee that first line of data is
+	skipped if 'set key autotitle columnhead' is in effect regardless of
+	whether the column headers are used.
+	Bug #1751
+
+2016-09-02  Ethan A Merritt  <merritt@u.washington.edu>
+
+	* src/datafile.c (df_generate_pseudodata):
+	Grid coordinates generated by splot '++' are subject to round-off error.
+	This error is most noticeable at the plot boundary, where it may be that
+	(sample_min + nsteps * stepsize != sample_max). This is more likely to
+	be visible on 32-bit systems than on 64-bit systems.
+	Force the final grid coordinate to be exactly sample_max.
+	Bug #1850
+
+2016-09-01  Ethan A Merritt  <merritt@u.washington.edu>
+
+	* term/pslatex.trm:  The begin/end of plot bookkeeping of internal state
+	that would otherwise be done by PS_layer() needs to be done instead by
+	the replacement routine PSLATEX_layer().  In particular the final line
+	a plot needs to be stroked and the linetype reset.
+	Bug #1852
+
+2016-08-28  Ethan A Merritt  <merritt@u.washington.edu>
+
+	* demo/smooth.dem docs/gnuplot.doc:  Update docs for "smooth" option.
+	Fix regression in demo caused by failure to promote N = points per bin
+	to a real number.
+
+2016-08-26  Per Bothner  <per@bothner.com>
+
+	* term/svg.trm src/term.c (init_terminal):
+	New terminal "domterm" wraps svg output in escape sequences compatible
+	with in-line display in terminal emulators based on DomTerm
+	(http://domterm.org). Conceptually similar to the tektronix, sixel,
+	selanar etc graphic modes that interleaved with text output in
+	old-school character cell terminals or emulators like xterm.
+
+2016-08-25  Ethan A Merritt  <merritt@u.washington.edu>
+
+	* src/color.c src/set.c src/gadgets.c src/gadgets.h src/tables.c
+	src/tables.h src/save.c src/show.c docs/gnuplot.doc:  New keyword
+	"set colorbox {{no}invert" flips the top/bottom orientation of a
+	vertical gradient; i.e. the same color maps to the same numerical value
+	but the orientation of the sample is inverted.  Display of horizontal
+	gradients is not affected.
+	Tracker issue #1808
+
+	* src/wxterminal/wxt_gui.cpp (wxtFrame::OnExport):  Revisit the file
+	export widget. I misread the code previously, thinking there was only a
+	single global command list. Actually there is a global pointer but each
+	window has its own command list.  So we really can export inactive plots
+	as well as the active plot.  The global command list pointer is now
+	unused so get rid of it.
+	Bug #1843
+
+2016-08-24  Ethan A Merritt  <merritt@u.washington.edu>
+
+	* src/plot2d.c (refresh_bounds box_range_fiddling): Improved autoscaling
+	of plots "with boxes". Extend y range to 0. Distinguish between absolute
+	and relative boxwidth.
+	Bug #1827
+
+	* src/plot2d.c (eval_plots): "smooth {freq|fnorm|cum|cnorm}" operations
+	replace the original data, which invalidates autoscaling during input.
+	Now we save/restore autoscale state during input so that autoscaling of
+	the smoothed data starts from a clean slate.
+	Bug #1826
+
+2016-08-22  Ethan A Merritt  <merritt@u.washington.edu>
+
+	* src/gadgets.h (arrow_end_undefined) src/set.c src/graphics.c:
+	Initialize arrow structure to have type arrow_end_undefined.
+	If we see an arrow with that type later, it indicates corruption due
+	to an error exit from "set arrow".
+
+	* src/eval.c (evaluate_at): Make unsupported array operations fatal
+	(int_error) rather than informational (int_warn).  The int_warn version
+	eventually returned UNDEFINED or NaN to the caller, and not all callers
+	were prepared to deal with that.  E.g. 
+	    array A[1]; set xrange [0:A]; set param; splot u,u,u ---> boom!
+
+	* src/tabulate.c (output_number):  Oops. Forgot to check for log being
+	implemented via nonlinear axes.  This should have been part of the
+	nonlinear axis patch set. 
+
+2016-08-21  Ethan A Merritt  <merritt@u.washington.edu>
+
+	* src/wxterminal/wxt_gui.cpp (wxtFrame::OnExport):  The Export widget
+	on a plot window should dump a copy of the plot in that window, not a
+	copy of the currently active plot.  Modify the OnExport function 
+	accordingly.  Unfortunately to generate PDF or SVG files we want to
+	reexecute the list of commands that generated the plot, but we only 
+	keep such a list for the currently active plot.  So Export from 
+	inactive windows is limited to the clipboard or PNG files.
+	Bug #1843
+	
+	* src/readline.c (getc_wrapper):  Clear errno before reading next
+	character.  This fix contributed anonymously.
+	Bug #1846
+
+2016-08-19  Ethan A Merritt  <merritt@u.washington.edu>
+
+	* src/util.c (squash_spaces) src/util.h src/command.c:
+	Modify squash_spaces() utility routine to optionally leave a single
+	space in place of whitespace or remove whitespace altogether.
+
+	* src/datafile.h src/datafile.c src/stats.c docs/gnuplot.doc:
+	Rearrange the order in which we parse the "stats" command.
+	This allows passing "columnheader" or "columnheader(N)" to the 
+	"name" option rather than a fixed character string.
+	Bug #1841
+
+	* src/axis.c (eval_link_function) src/save.c (save_nonlinear):
+	If there is an expression-parsing error while processing a 
+	"set nonlinear" command, the forward/reverse axis mapping can be
+	left in a corrupted state.  Add a sanity check for this to prevent
+	bad things from happening when the axis mapping function is invoked.
+
+	* src/axis.c (gstrdms):  Sanity check user-provided format.
+	Reject format characters that are not handled explicitly.
+
+	* src/stats.c (statsrequest):  Early exit if there are no usable points.
+
+	* src/fit.c (update): Fix error in error reporting (null filename).
+
+2016-08-18  Ethan A Merritt  <merritt@u.washington.edu>
+
+	* src/fit.c: Clear SAMPLE_AXIS before using it as scratch space.
+
+	* src/eval.c src/eval.h (free_at): afl-fuzz found multiple crashes
+	caused by trying to evaluate a defunct action table.  This patch wraps
+	free_at() in a macro that clears the pointer to an action table after
+	freeing it.
+
+2016-08-17  Dima Kogan  <dima@secretsauce.net>
+
+	* src/gp_types.h src/interpol.c src/plot2d.c src/tables.c
+	docs/gnuplot.doc:  New option "smooth fnormal" plots normalized
+	frequency, analogous to plot foo using 1:(1./total) smooth freq"
+
+2016-08-17  Daniel J Sebald <daniel.sebald@ieee.org>
+
+	* term/lua.trm: Warn on error from fflush() or ftruncate().
+	Bug #1840
+
+2016-08-17  AMD  <allanduncan@sf.net>
+
+	* term/post.trm: Different treatment of simplex/duplex option 
+	depending on whether the PostScript support is limited to Level 1.
+
+2016-08-16  Ethan A Merritt  <merritt@u.washington.edu>
+
+	* src/misc.c (lp_parse) src/plot2d.c (eval_plots): Remove order
+	dependence of the "fillcolor" keyword and confusion with line style.
+	For example these commands were not working:
+	    plot 'silver.dat' with boxes fs solid 1.0 border -1 fc "cyan"
+	    plot 'silver.dat' with boxes fc "cyan" fs solid 1.0 border -1 lw 2
+
+	* src/graphics.c (plot_filledcurves) src/plot2d.c (cp_extend)
+	src/plot2d.c docs/gnuplot.doc:
+	This is a CHANGE in filledcurves behaviour with repect to fillstyle.
+	The fillstyle "border" attribute is now ignored except for filledcurves
+	option "closed", the default. In order to make sure the border is
+	drawn all the way around, duplicate the first point at the end.
+
+2016-08-12  Ethan A Merritt  <merritt@u.washington.edu>
+
+	* src/plot3d.c (eval_3dplots) src/plot2d.c (eval_plots):
+	Check for legal log-scaled axis ranges before trying to plot.
+
+	* src/axis.c (axis_log_value_checked):  Rewrite test for positive 
+	values so that it catches NaN as well as negative numbers.
+
+	* src/command.c (link_command): More robust handling of error during
+	'set link' or 'set nonlinear' commands. Do not fill in the
+	axis->linked_to_* fields until after the points of potential failure.
+
+	* src/eval.c src/eval.h (free_at): afl-fuzz found multiple crashes
+	caused by trying to evaluate a defunct action table.  This patch wraps
+	free_at() in a macro that clears the pointer to an action table after
+	freeing it.
+
+2016-08-11  Ethan A Merritt  <merritt@u.washington.edu>
+
+	* src/plot2d.c (box_range_fiddling):  afl-fuzz found a crash caused by
+	 an incorrect test for no data points.
+
+	* src/command.c (link_command):  If the "set nonlinear" failed to
+	complete it could leave an axis marked as nonlinear but with no mapping
+	functions defined.  Now we reset the links on failure.
+
+	* src/set.c (encoding_minus):  Comment out replacement of the SJIS minus 
+	sign character.  The character itself is correct but it is a full-width
+	rather glyph so it does not mix well with half-width digits in a number.
+	This problem is specific to SJIS.
+
+2016-08-11  Bastian Maerkisch  <bmaerkisch@web.de>
+
+	* src/win/wgraph.c:  Print the error code if opening the print dialog
+	should fail.
+
+	* config/config.nt (HAVE_ERF, HAVE_ERFC, HAVE_STDBOOL_H, isnan
+	EAM_OBJECTS):  Version dependent macros to re-enable compilation
+	with at least VS2012 or newer.
+
+2016-08-10  Bastian Maerkisch  <bmaerkisch@web.de>
+
+	* src/win/wgraph.c (CopyPrint) src/win/wprinter.c (DumpPrinter)
+	src/win/wresourc.h src/win/wgnuplib.rc src/win/wgnuplot.rc:
+	Add a progress bar to print progress dialog.  Bump minimum Windows
+	version to XP here, too.
+
+	* src/win/wgnuplib.rc:  Change (nominal) font size of most dialogs to
+	8pt in order to match Windows default settings.
+
+	* src/win/wresourc.h:  Message code for saving as bitmap was in conflict
+	with the message code for hiding graph #2.  Bugfix.
+
+	* src/win/wcommon.h src/win/wgraph.c src/win/wprinter.c:  Store the
+	memory handles itself to save the user's printer selection (instead of
+	the pointer returned by GlobalAlloc) and use them in all printer
+	dialogs. Bugfix.
+
+	* src/win/wprinter.c (DumpPrinter, PrintDlgProc) src/win/wgraph.c 
+	(CopyPrint) src/win/wgnuplib.h (GP_PRINT):  Changing the private data
+	of some possibly unknown window is dangerous.  Store the pointer to the
+	printer data in the dialog's 'WindowLong's instead.
+
+	* src/win/wprinter (DumpPrinter):  The Escape() function always expects
+	a byte encoded string, irrespective if UNICODE is defined or not.
+	Explicit type casting may hide errors. Bugfix.
+
+2016-08-09  Hans-Bernhard Broeker  <broeker@physik.rwth-aachen.de>
+
+	* config/msvc/Makefile (#QTDIR, TOP, MOC, UIC, RCC, S, W, WX, Q)
+	(T, D, M, {$(S)}.c.obj, {$(S)}.c.cobj, $(HELPFILE), doc2html.exe)
+	($(M)bf_test.exe, demo_plugin.dll): Reduce slightly excessive use
+	of double backslashes.
+	(VERSION_CPPFLAGS): Define version numbering flags.
+	(doc2html.exe): Pass version numbering flags.
+	(COMMONLIBS): Add newly required lib shlwapi.
+
+	* config/config.nt (HAVE_ERF, HAVE_ERFC, HAVE_STDBOOL_H, isnan):
+	Configure macros for current version of MSVC (VS 2015).
+
+2016-08-09  Bastian Maerkisch  <bmaerkisch@web.de>
+
+	* src/win/wgdiplus.cpp:  Fix two more memory leaks.
+
+	* src/win/wcommon.h src/win/wgnuplib.h src/win/wgraph.c
+	src/win/wgdiplus.cpp:  GDI+ implementation of enhanced text.
+	Until now the GDI+ backend still used the GDI code to draw enhanced
+	text, which caused differences in layout if text was rendered as
+	"normal" or enhanced text.  We now re-use the previous GDI-only
+	routines and introduce function pointers to call GDI or GDI+ code
+	depending on if they are called from drawgraph() or
+	drawgraph_gdiplus().
+
+	* src/win/wmenu.c:  Loading of icon images requires GDI+.  Add an error
+	message if support for it is not compiled in.  Fix the case when
+	GNUPLOT_SHARE_DIR is not defined.
+
+	* term/svg.trm:  The change on 2016-08-05 did not handle the case
+	of GNUPLOT_JS_DIR being undefined.
+
+	* src/win/wtext.c:  getc might be a macro and thus needs to be
+	undefine'd before redefinition.
+
+	* src/win/wgdiplus.cpp:  Include iostream.h before syscfg.h in order
+	to avoid MSVC choking on the re-definition of stdio routines by
+	wtext.h/winmain.c.  Do not use namespace std since this causes MSVC
+	to throw an error because of the (re-)definition of bool in syscfg.h.
+
+	* src/win/wmenu.c:  Move variable declaration to beginning of code
+	block.  Required e.g. by MSVC 2012.
+
+	* src/win/wgraph.c src/win/wgdiplus.cpp (W_hypertext):  Use the
+	encoding which was active while plotting, not the current one, to
+	display hypertext.
+
+2016-08-09  Hans-Bernhard Broeker  <broeker@physik.rwth-aachen.de>
+
+	* config/mingw/Makefile:  Enforce calling the lua executable instead
+	of the lua wrapper script of Mingw64.  Better fix for the build failure
+	of gnuplot-tikz.help.
+
+2016-08-08  Bastian Maerkisch  <bmaerkisch@web.de>
+
+	* config/mingw/Makefile:  Avoid warning messages when using clang.
+	Qt 5.x assumes C++11. Omit C++ flags when building gp_cairo.c.
+	Japanese help file was missing a graph from the demos.  Execute lua
+	via the cmd.exe shell in order to avoid errors when redirecting its
+	output.  Remove obsolete flag CONSOLE_SWITCH_CP.  Do not enable caca
+	terminal by default.
+
+2016-08-07  Ethan A Merritt  <merritt@u.washington.edu>
+
+	* src/save.c src/set.c src/show.c src/tables.c src/tables.h src/unset.c
+	src/util.c src/util.h docs/gnuplot.doc term/js/canvasmath.js:
+
+	New command "set minussign" tells gprintf() to use an encoding-specific
+	minus sign character for numeric output rather than the ascii hyphen
+	character produced by sprintf().
+	    UTF-8:	Unicode U+2212 "minus sign"
+	    CP1252:	ALT+150 "en dash"
+	    SJIS:	0x817c
+	    default:	ascii \055 "hyphen"
+
+	The substitution of minus sign for hyphen is not made during tabular
+	output ("set table") or when the current terminal is a LaTeX terminal.
+	It affects only numbers formatted by gprint().  Other hyphens are 
+	not affected even if they are in a gprintf format string.
+
+	* src/boundary.c (do_key_layout):  Tweak vertical spacing of key titles
+	to make the result more like previous versions (in particular
+	the canvas terminal).  See patch of 2016-07-14
+
+2016-08-06  Tatsuro MATSUOKA  <tmacchant3@yahoo.co.jp>
+
+	* src/wxterminal/wxt_gui.h:  Correct spelling of include file name.
+	Bug #1836
+
+2016-08-06  Bastian Maerkisch  <bmaerkisch@web.de>
+
+	* src/command.c src/plot.c src/syscfg.h src/win/winmain.c|h
+	src/win/wtext.c|h:  Enable support for encodings (including UTF-8) for
+	console mode gnuplot on Windows.
+	Patch #734
+
+	* src/win/wmenu.c src/win/wgdiplus.c|h src/win/wgnuplot.mnu:  Images
+	of toolbar icons can be read from a file.
+
 2016-08-05  Ethan A Merritt  <merritt@u.washington.edu>
 
-	* src/plot2d.c src/set.c:  When logscaling is implemented via nonlinear
-	axes, a test for "if (R_AXIS.log)" must come _after_ a test for
-	"if nonlinear(&R_AXIS)".  Only affects logscaled polar axis.
+	* src/plot2d.c src/set.c src/mouse.c:  When logscaling is implemented
+	via nonlinear axes, any test for "if (R_AXIS.log)" must come _after_
+	a test for "if nonlinear(&R_AXIS)". Only affects logscaled polar axis.
+	Nonlinear axes part 19
 
 2016-08-05  Bastian Maerkisch  <bmaerkisch@web.de>
 
@@ -65,8 +548,8 @@
 
 2016-07-31  Bastian Maerkisch  <bmaerkisch@web.de>
 
-	* src/wxterminal/wxt_gui.cpp:  Handle errors when creating cairo
-	surfaces.
+	* src/wxterminal/wxt_gui.cpp:  Handle errors when creating a cairo
+	surface.
 	Bug #1621
 
 2016-07-29  Ethan A Merritt  <merritt@u.washington.edu>
@@ -79,12 +562,12 @@
 
 	* src/win/wgraph.c src/win/wgdiplus.cpp|h src/win/wresourc.h:  Add an
 	option to the menu to save the current graph as bitmap.  Supports all
-	encoders available to GDI+.  On my system that is (TIFF, JPEG, GIF, PNG,
-	and BMP).  Defaults to PNG.
+	encoders available to GDI+.  On my system that is (TIFF, JPEG, GIF,
+	PNG, and BMP).  Defaults to PNG.
 
-	* src/win/wgraph.c (SaveAsEMF):  Tweak flags for GetSaveFileName() to make
-	sure that the file/path is not read-only and to preserve the current
-	working directory.
+	* src/win/wgraph.c (SaveAsEMF):  Tweak flags for GetSaveFileName() to
+	make sure that the file/path is not read-only and to preserve the
+	current working directory.
 
 2016-07-26  Bastian Maerkisch  <bmaerkisch@web.de>
 
@@ -117,7 +600,7 @@
 	See also bug #1807.
 
 	* src/win/wtext.c (DoLine):  Fix off-by-one error which caused the
-	area below the last line to contain garbage in some cases. 
+	area below the last line to contain garbage in some cases.
 
 2016-07-23  Bastian Maerkisch  <bmaerkisch@web.de>
 
@@ -195,15 +678,15 @@
 
 2016-07-20  Ethan A Merritt  <merritt@u.washington.edu>
 
-	* src/history.c (write_history_list):  Recent regression caused the 
+	* src/history.c (write_history_list):  Recent regression caused the
 	the history list numbering to be off-by-one. E.g. "history !N"
 	mistakenly re-executed command N-1 rather than command N.
 	See also Bug #1763
 
 2016-07-19  Jun Takimoto <takimoto-j@kba.biglobe.ne.jp>
 
-	* term/aquaterm.trm:  The AQUA_boxfill() routine scales very badly 
-	with the total number of rectangles, making it horribly slow when 
+	* term/aquaterm.trm:  The AQUA_boxfill() routine scales very badly
+	with the total number of rectangles, making it horribly slow when
 	invoked by "plot $foo with image pixels".  Set the terminal flag
 	TERM_POLYGON_PIXELS so that the image processing code will call
 	term->filled_polygon() in preference to term->fillbox().
@@ -223,7 +706,7 @@
 	The command 'set key spacing <foo>' adjusts the vertical spacing of
 	entries in the key.  However a complicated minimum size test caused the
 	result to be discontinuous as a function of <foo>.
-	I.e. 'set key spacing 2' came out the same as 'set key spacing 1' 
+	I.e. 'set key spacing 2' came out the same as 'set key spacing 1'
 	but both were smaller than 'set key spacing 1.8'.
 	This patch makes the vertical spacing a simple multiplier for
 	character height in the current font.  It also dissociates the

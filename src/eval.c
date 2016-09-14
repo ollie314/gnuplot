@@ -1,5 +1,5 @@
 #ifndef lint
-static char *RCSid() { return RCSid("$Id: eval.c,v 1.135 2016-03-17 05:53:47 sfeam Exp $"); }
+static char *RCSid() { return RCSid("$Id: eval.c,v 1.140 2016-09-10 05:46:22 sfeam Exp $"); }
 #endif
 
 /* GNUPLOT - eval.c */
@@ -239,7 +239,7 @@ static JMP_BUF fpe_env;
 static RETSIGTYPE
 fpe(int an_int)
 {
-#if defined(MSDOS) && !defined(__EMX__) && !defined(DJGPP) && !defined(_Windows)
+#if defined(MSDOS) && !defined(__EMX__) && !defined(DJGPP) && !defined(_WIN32)
     /* thanks to lotto@wjh12.UUCP for telling us about this  */
     _fpreset();
 #endif
@@ -710,13 +710,17 @@ evaluate_at(struct at_type *at_ptr, struct value *val_ptr)
     }
 
     if (!undefined && val_ptr->type == ARRAY) {
-	int_warn(NO_CARET, "evaluate_at: unsupported array operation");
+	/* Aug 2016: error rather than warning because too many places
+	 * cannot deal with UNDEFINED or NaN where they were expecting a number
+	 * E.g. load_one_range()
+	 */
 	val_ptr->type = NOTDEFINED;
+	int_error(NO_CARET, "evaluate_at: unsupported array operation");
     }
 }
 
 void
-free_at(struct at_type *at_ptr)
+real_free_at(struct at_type *at_ptr)
 {
     int i;
     /* All string constants belonging to this action table have to be
@@ -730,7 +734,7 @@ free_at(struct at_type *at_ptr)
 	    gpfree_string(&(a->arg.v_arg));
 	/* a summation contains its own action table wrapped in a private udf */
 	if (a->index == SUM) {
-	    free_at(a->arg.udf_arg->at);
+	    real_free_at(a->arg.udf_arg->at);
 	    free(a->arg.udf_arg);
 	}
 #ifdef HAVE_EXTERNAL_FUNCTIONS
@@ -968,6 +972,7 @@ update_gpval_variables(int context)
 	fill_gpval_float("GPVAL_VIEW_ROT_Z", surface_rot_z);
 	fill_gpval_float("GPVAL_VIEW_SCALE", surface_scale);
 	fill_gpval_float("GPVAL_VIEW_ZSCALE", surface_zscale);
+	fill_gpval_float("GPVAL_VIEW_AZIMUTH", azimuth);
 	return;
     }
 
@@ -984,6 +989,7 @@ update_gpval_variables(int context)
 	fill_gpval_string("GPVAL_TERMOPTIONS", term_options);
 	fill_gpval_string("GPVAL_OUTPUT", (outstr) ? outstr : "");
 	fill_gpval_string("GPVAL_ENCODING", encoding_names[encoding]);
+	fill_gpval_string("GPVAL_MINUS_SIGN", minus_sign ? minus_sign : "-");
     }
 
     /* If we are called from int_error() then set the error state */
@@ -1044,14 +1050,9 @@ update_gpval_variables(int context)
 
 /* System information is stored in GPVAL_BITS GPVAL_MACHINE GPVAL_SYSNAME */
 #ifdef HAVE_UNAME
-#include <sys/utsname.h>
-    struct utsname uts;
-#elif defined(_Windows)
-#include <windows.h>
-/* external header file findverion.h to find windows version from windows 2000 to 8.1*/
-#ifdef HAVE_FINDVERSION_H
-#include <findversion.h>
-#endif
+# include <sys/utsname.h>
+#elif defined(_WIN32)
+# include <windows.h>
 #endif
 
 void
@@ -1060,27 +1061,26 @@ fill_gpval_sysinfo()
 /* For linux/posix systems with uname */
 #ifdef HAVE_UNAME
     struct utsname uts;
+
     if (uname(&uts) < 0)
 	return;
     fill_gpval_string("GPVAL_SYSNAME", uts.sysname);
     fill_gpval_string("GPVAL_MACHINE", uts.machine);
 
 /* For Windows systems */
-#elif defined(_Windows)
+#elif defined(_WIN32)
     SYSTEM_INFO stInfo;
-
-#ifdef HAVE_FINDVERSION_H
-    OSVERSIONINFOEX ret;
-    int exitCode = GetVersionExEx(&ret);
+    OSVERSIONINFO osvi;
     char s[30];
-    snprintf(s, 30, "Windows_NT-%d.%d", ret.dwMajorVersion, ret.dwMinorVersion);
-    fill_gpval_string("GPVAL_SYSNAME", s);
-#else
-    fill_gpval_string("GPVAL_SYSNAME", "Windows");
-#endif
 
-    GetSystemInfo( &stInfo );
-    switch( stInfo.wProcessorArchitecture )
+    ZeroMemory(&osvi, sizeof(OSVERSIONINFO));
+    osvi.dwOSVersionInfoSize = sizeof(OSVERSIONINFO);
+    GetVersionEx(&osvi);
+    snprintf(s, 30, "Windows_NT-%ld.%ld", osvi.dwMajorVersion, osvi.dwMinorVersion);
+    fill_gpval_string("GPVAL_SYSNAME", s);
+
+    GetSystemInfo(&stInfo);
+    switch (stInfo.wProcessorArchitecture)
     {
     case PROCESSOR_ARCHITECTURE_INTEL:
         fill_gpval_string("GPVAL_MACHINE", "x86");
@@ -1097,7 +1097,7 @@ fill_gpval_sysinfo()
 #endif
 
 /* For all systems */
-    fill_gpval_integer("GPVAL_BITS", 8*sizeof(void *));
+    fill_gpval_integer("GPVAL_BITS", 8 * sizeof(void *));
 }
 
 /* Callable wrapper for the words() internal function */

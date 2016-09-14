@@ -1,5 +1,5 @@
 #ifndef lint
-static char *RCSid() { return RCSid("$Id: show.c,v 1.365 2016-07-23 03:34:41 sfeam Exp $"); }
+static char *RCSid() { return RCSid("$Id: show.c,v 1.369 2016-09-10 05:46:22 sfeam Exp $"); }
 #endif
 
 /* GNUPLOT - show.c */
@@ -160,6 +160,7 @@ static void show_loadpath __PROTO((void));
 static void show_fontpath __PROTO((void));
 static void show_zero __PROTO((void));
 static void show_datafile __PROTO((void));
+static void show_minus_sign __PROTO((void));
 #ifdef USE_MOUSE
 static void show_mouse __PROTO((void));
 #endif
@@ -333,6 +334,9 @@ show_command()
 	break;
     case S_LOGSCALE:
 	show_logscale();
+	break;
+    case S_MINUS_SIGN:
+	show_minus_sign();
 	break;
     case S_OFFSETS:
 	show_offsets();
@@ -756,6 +760,7 @@ show_all()
     show_logscale();
     show_offsets();
     show_margin();
+    show_minus_sign();
     show_output();
     show_print();
     show_parametric();
@@ -1855,8 +1860,9 @@ show_key()
     SHOW_ALL_NL;
 
     if (!(key->visible)) {
-	fputs("\
-\tkey is OFF\n", stderr);
+	fputs("\tkey is OFF\n", stderr);
+	if (key->auto_titles == COLUMNHEAD_KEYTITLES)
+	    fputs("\ttreatment of first record as column headers remains in effect\n", stderr);
 	return;
     }
 
@@ -2448,8 +2454,11 @@ show_colorbox()
 	default: /* should *never* happen */
 	    int_error(NO_CARET, "Argh!");
     }
-    fprintf(stderr,"\tcolor gradient is %s in the color box\n",
-	color_box.rotation == 'v' ? "VERTICAL" : "HORIZONTAL");
+    if (color_box.rotation == 'v')
+	fprintf(stderr,"\tcolor gradient is vertical %s\n",
+	color_box.invert ? " (inverted)" : "");
+    else
+	fprintf(stderr,"\tcolor gradient is horizontal\n");
 }
 
 
@@ -2561,6 +2570,18 @@ show_decimalsign()
         fprintf(stderr, "\tdecimalsign for output has default value (normally '.')\n");
 
     fprintf(stderr, "\tdegree sign for output is %s \n", degree_sign);
+}
+
+/* process 'show minus_sign' command */
+static void
+show_minus_sign()
+{
+    SHOW_ALL_NL;
+
+    if (use_minus_sign && minus_sign)
+        fprintf(stderr, "\tminus sign for output is %s \n", minus_sign);
+    else
+        fprintf(stderr, "\tno special minus sign\n");
 }
 
 
@@ -2716,6 +2737,7 @@ show_view()
     fprintf(stderr,"\t\t%s axes are %s\n",
 		aspect_ratio_3D == 2 ? "x/y" : aspect_ratio_3D == 3 ? "x/y/z" : "",
 		aspect_ratio_3D >= 2 ? "on the same scale" : "independently scaled");
+    fprintf(stderr, "\t\t azimuth %g\n", azimuth);
 }
 
 

@@ -1,5 +1,5 @@
 #ifndef lint
-static char *RCSid() { return RCSid("$Id: util.c,v 1.141 2016-07-03 05:01:09 sfeam Exp $"); }
+static char *RCSid() { return RCSid("$Id: util.c,v 1.143 2016-08-19 16:13:59 sfeam Exp $"); }
 #endif
 
 /* GNUPLOT - util.c */
@@ -64,6 +64,10 @@ char *decimalsign = NULL;
 
 /* degree sign.  Defaults to UTF-8 but will be changed to match encoding */
 char degree_sign[8] = "°";
+
+/* minus sign (encoding-specific string) */
+const char *minus_sign = NULL;
+TBOOLEAN use_minus_sign = FALSE;
 
 /* Holds the name of the current LC_NUMERIC as set by "set decimal locale" */
 char *numeric_locale = NULL;
@@ -928,6 +932,47 @@ gprintf(
 	    }
 	}
 
+    /* EXPERIMENTAL
+     * Some people prefer a "real" minus sign to the hyphen that standard
+     * formatted input and output both use.  Unlike decimal signs, there is
+     * no internationalization mechanism to specify this preference.
+     * This code replaces all hyphens with the character string specified by
+     * 'set minus_sign "..."'   typically unicode character U+2212 "−".
+     * Use at your own risk.  Should be OK for graphical output, but text output
+     * will not be readable by standard formatted input routines.
+     */
+	if (use_minus_sign		/* set minussign */
+	    && minus_sign		/* current encoding provides one */
+	    && !table_mode		/* not used inside "set table" */
+	    && !(term->flags & TERM_IS_LATEX)	/* but LaTeX doesn't want it */
+	   ) {
+
+	    char *dotpos1 = dest;
+	    char *dotpos2;
+	    size_t newlength = strlen(minus_sign);
+
+	    /* dot is the default hyphen we will be replacing */
+	    int dot = '-';
+
+	    /* replace every dot by the contents of minus_sign */
+	    while ((dotpos2 = strchr(dotpos1,dot)) != NULL) {
+		if (newlength == 1) {	/* The normal case */
+		    *dotpos2 = *minus_sign;
+		    dotpos1++;
+		} else {		/* Some multi-byte minus marker */
+		    size_t taillength = strlen(dotpos2);
+		    dotpos1 = dotpos2 + newlength;
+		    if (dotpos1 + taillength > limit)
+			int_error(NO_CARET,
+				  "format too long due to minus_sign string");
+		    /* move tail end of string out of the way */
+		    memmove(dotpos1, dotpos2 + 1, taillength);
+		    /* insert minus_sign */
+		    memcpy(dotpos2, minus_sign, newlength);
+		}
+	    }
+	}
+
 	/* this was at the end of every single case, before: */
 	dest += strlen(dest);
 	++format;
@@ -1162,11 +1207,12 @@ int_warn(int t_num, const char str[], va_dcl)
 /*}}} */
 
 
-/* Squash spaces in the given string (DFK) */
-/* That is, reduce all multiple white-space chars to single spaces */
-/* Done in place. Currently used only by help_command() */
+/*
+ * Reduce all multiple white-space chars to single spaces (if remain == 1)
+ * or remove altogether (if remain == 0).  Modifies the original string.
+ */
 void
-squash_spaces(char *s)
+squash_spaces(char *s, int remain)
 {
     char *r = s;	/* reading point */
     char *w = s;	/* writing point */
@@ -1175,7 +1221,7 @@ squash_spaces(char *s)
     for (w = r = s; *r != NUL; r++) {
 	if (isspace((unsigned char) *r)) {
 	    /* white space; only copy if we haven't just copied a space */
-	    if (!space) {
+	    if (!space && remain > 0) {
 		space = TRUE;
 		*w++ = ' ';
 	    }			/* else ignore multiple spaces */

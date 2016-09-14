@@ -1,5 +1,5 @@
 /*
- * $Id: wxt_gui.h,v 1.55 2016-02-14 09:54:27 markisch Exp $
+ * $Id: wxt_gui.h,v 1.57 2016-08-26 04:16:10 sfeam Exp $
  */
 
 /* GNUPLOT - wxt_gui.h */
@@ -172,9 +172,9 @@ extern "C" {
  * console window */
 # ifdef _Windows
 #  ifndef _WIN32_WINNT 
-#   define _WIN32_WINNT 0x0500
+#   define _WIN32_WINNT 0x0501
 #  endif
-#  include "Windows.h"
+#  include <windows.h>
 #  include "win/wtext.h"
 #  include "win/winmain.h"
 # endif
@@ -597,7 +597,6 @@ static wxt_window_t* wxt_findwindowbyid(wxWindowID);
 
 /* pointers to currently active instances */
 static wxt_window_t *wxt_current_window;
-static command_list_t *wxt_current_command_list;
 static wxtPanel *wxt_current_panel;
 static plot_struct *wxt_current_plot;
 

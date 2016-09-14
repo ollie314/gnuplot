@@ -1,5 +1,5 @@
 #ifndef lint
-static char *RCSid() { return RCSid("$Id: tabulate.c,v 1.24 2015/05/08 18:17:09 sfeam Exp $"); }
+static char *RCSid() { return RCSid("$Id: tabulate.c,v 1.26 2016-09-06 04:53:15 sfeam Exp $"); }
 #endif
 
 /* GNUPLOT - tabulate.c */
@@ -64,6 +64,7 @@ udvt_entry *table_var = NULL;
 TBOOLEAN table_mode = FALSE;
 
 static char *expand_newline __PROTO((const char *in));
+static TBOOLEAN imploded __PROTO((curve_points *this_plot));
 
 static FILE *outfile;
 
@@ -93,9 +94,11 @@ output_number(double coord, int axis, char *buffer) {
 	    gstrftime(buffer+1, BUFFERSIZE-1, axis_array[axis].formatstring, coord);
 	while (strchr(buffer,'\n')) {*(strchr(buffer,'\n')) = ' ';}
 	strcat(buffer,"\"");
+#if !defined(NONLINEAR_AXES) || (NONLINEAR_AXES == 0)
     } else if (axis_array[axis].log) {
 	double x = pow(axis_array[axis].base, coord);
 	gprintf(buffer, BUFFERSIZE, axis_array[axis].formatstring, 1.0, x);
+#endif
     } else
 	gprintf(buffer, BUFFERSIZE, axis_array[axis].formatstring, 1.0, coord);
     strcat(buffer, " ");
@@ -225,6 +228,9 @@ print_table(struct curve_points *current_plot, int plot_num)
 
 	} else {
 	    int plotstyle = current_plot->plot_style;
+	    int type;
+	    TBOOLEAN replace_undefined_with_blank = imploded(current_plot);
+
 	    if (plotstyle == HISTOGRAMS && current_plot->histogram->type == HT_ERRORBARS)
 		plotstyle = YERRORBARS;
 
@@ -317,12 +323,19 @@ print_table(struct curve_points *current_plot, int plot_num)
 		    }
 		}
 
+		type = current_plot->points[i].type;
+
 		snprintf(buffer, BUFFERSIZE, " %c",
-		    current_plot->points[i].type == INRANGE
-		    ? 'i' : current_plot->points[i].type == OUTRANGE
-		    ? 'o' : 'u');
+			type == INRANGE ? 'i' : type == OUTRANGE ? 'o' : 'u');
 		strappend(&line, &size, len, buffer);
-		print_line(line);
+
+		/* cp_implode() inserts dummy undefined point between curves */
+		/* but datafiles use a blank line for this purpose */
+		if (type == UNDEFINED && replace_undefined_with_blank)
+		    print_line("");
+		else 
+		    print_line(line);
+
 	    } /* for(point i) */
 	}
 
@@ -505,4 +518,29 @@ expand_newline(const char *in)
 	    *t++ = *s;
     } while (*s++);
     return tmpstr;
+}
+
+static TBOOLEAN
+imploded(curve_points *this_plot)
+{
+    switch (this_plot->plot_smooth) {
+	/* These smooth styles called cp_implode() */
+	case SMOOTH_UNIQUE:
+	case SMOOTH_FREQUENCY:
+	case SMOOTH_FREQUENCY_NORMALISED:
+	case SMOOTH_CUMULATIVE:
+	case SMOOTH_CUMULATIVE_NORMALISED:
+	case SMOOTH_CSPLINES:
+	case SMOOTH_ACSPLINES:
+	case SMOOTH_SBEZIER:
+	case SMOOTH_MONOTONE_CSPLINE:
+	    return TRUE;
+	/* These ones did not */
+	case SMOOTH_NONE:
+	case SMOOTH_BEZIER:
+	case SMOOTH_KDENSITY:
+	default:
+	    break;
+    }
+    return FALSE;
 }

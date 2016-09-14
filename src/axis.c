@@ -1,5 +1,5 @@
 #ifndef lint
-static char *RCSid() { return RCSid("$Id: axis.c,v 1.200 2016-08-03 04:22:18 sfeam Exp $"); }
+static char *RCSid() { return RCSid("$Id: axis.c,v 1.203 2016-08-19 21:27:23 sfeam Exp $"); }
 #endif
 
 /* GNUPLOT - axis.c */
@@ -244,7 +244,7 @@ double
 axis_log_value_checked(AXIS_INDEX axis, double coord, const char *what)
 {
     if (axis_array[axis].log) {
-	if (coord <= 0.0) {
+	if (!(coord > 0.0)) {
 	    int_error(NO_CARET, "%s has %s coord of %g; must be above 0 for log scale!",
 			what, axis_name(axis), coord);
 	} else
@@ -2157,8 +2157,11 @@ char *c, *cfmt;
 
     for (c = cfmt = gp_strdup(format); *c; ) {
 	if (*c++ == '%') {
-	    while (*c && !strchr("DdMmSsEN%",*c))
+	    while (*c && !strchr("DdMmSsEN%",*c)) {
+		if (!isdigit(*c) && !isspace(*c) && !ispunct(*c))
+			int_error(NO_CARET,"unrecognized format: \"%s\"",format);
 		c++;
+	    }
 	    switch (*c) {
 	    case 'D':	*c = 'g'; dtype = 1; degrees = Degrees; break;
 	    case 'd':	*c = 'f'; dtype = 2; break;
@@ -2354,6 +2357,10 @@ eval_link_function(struct axis *axis, double raw_coord)
     link_udf->dummy_values[1-dummy_var].type = INVALID_NAME;
 
     Gcomplex(&link_udf->dummy_values[dummy_var], raw_coord, 0.0);
+
+    if (link_udf->at == NULL)
+	int_error(NO_CARET,"corrupt axis link");
+
     evaluate_at(link_udf->at, &a);
 
     if (undefined || a.type != CMPLX) {

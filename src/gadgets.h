@@ -109,7 +109,8 @@ typedef struct text_label {
 typedef enum arrow_type {
     arrow_end_absolute,
     arrow_end_relative,
-    arrow_end_oriented
+    arrow_end_oriented,
+    arrow_end_undefined
     } arrow_type;
 
 typedef struct arrow_def {
@@ -397,6 +398,7 @@ typedef struct {
   int xoffset;	/* To adjust left or right, e.g. for y2tics */
   struct position origin;
   struct position size;
+  TBOOLEAN invert;	/* gradient low->high runs top->bot rather than bot->top */
   BoundingBox bounds;
 } color_box_struct;
 

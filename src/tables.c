@@ -1,5 +1,5 @@
 #ifndef lint
-static char *RCSid() { return RCSid("$Id: tables.c,v 1.144 2016-04-23 22:59:31 sfeam Exp $"); }
+static char *RCSid() { return RCSid("$Id: tables.c,v 1.147 2016-08-25 20:07:08 sfeam Exp $"); }
 #endif
 
 /* GNUPLOT - tables.c */
@@ -129,6 +129,7 @@ const struct gen_table plot_smooth_tbl[] =
     { "k$density", SMOOTH_KDENSITY },
     { "cn$ormal", SMOOTH_CUMULATIVE_NORMALISED },
     { "mcs$plines", SMOOTH_MONOTONE_CSPLINE },
+    { "fnor$mal", SMOOTH_FREQUENCY_NORMALISED },
     { NULL, SMOOTH_NONE }
 };
 
@@ -216,6 +217,7 @@ const struct gen_table set_tbl[] =
     { "tmar$gin", S_TMARGIN },
     { "bmar$gin", S_BMARGIN },
 
+    { "minus$sign", S_MINUS_SIGN },
 #ifdef USE_MOUSE
     { "mo$use", S_MOUSE },
 #endif
@@ -443,6 +445,8 @@ const struct gen_table set_colorbox_tbl[] =
     { "nobo$rder",	S_COLORBOX_NOBORDER },
     { "o$rigin",	S_COLORBOX_ORIGIN },
     { "s$ize",		S_COLORBOX_SIZE },
+    { "inv$ert",	S_COLORBOX_INVERT },
+    { "noinv$ert",	S_COLORBOX_NOINVERT },
     { "fr$ont",		S_COLORBOX_FRONT },
     { "ba$ck",		S_COLORBOX_BACK },
     { NULL, S_COLORBOX_INVALID }

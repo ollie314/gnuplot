@@ -1,5 +1,5 @@
 #ifndef lint
-static char *RCSid() { return RCSid("$Id: save.c,v 1.306 2016-07-23 03:34:41 sfeam Exp $"); }
+static char *RCSid() { return RCSid("$Id: save.c,v 1.311 2016-09-10 18:42:08 sfeam Exp $"); }
 #endif
 
 /* GNUPLOT - save.c */
@@ -618,12 +618,18 @@ set encoding %s\n\
     if (!numeric_locale && !decimalsign)
 	fprintf(fp, "unset decimalsign\n");
 
+    if (use_minus_sign)
+	fprintf(fp, "set minussign\n");
+    else
+	fprintf(fp, "unset minussign\n");
+
     fputs("set view ", fp);
     if (splot_map == TRUE)
 	fprintf(fp, "map scale %g", mapview_scale);
     else {
 	fprintf(fp, "%g, %g, %g, %g",
 	    surface_rot_x, surface_rot_z, surface_scale, surface_zscale);
+	fprintf(fp, "\nset view azimuth %g", azimuth);
     }
     if (aspect_ratio_3D)
 	fprintf(fp, "\nset view  %s", aspect_ratio_3D == 2 ? "equal xy" :
@@ -986,6 +992,7 @@ set origin %g,%g\n",
     fputs(" size ", fp);
     save_position(fp, &color_box.size, 2, FALSE);
     fprintf(fp, " %s ", color_box.layer ==  LAYER_FRONT ? "front" : "back");
+    fprintf(fp, " %sinvert ", color_box.invert ? "" : "no");
     if (color_box.border == 0) fputs("noborder", fp);
 	else if (color_box.border_lt_tag < 0) fputs("bdefault", fp);
 		 else fprintf(fp, "border %d", color_box.border_lt_tag);
@@ -1365,13 +1372,18 @@ void
 save_nonlinear(FILE *fp, AXIS *this_axis)
 {
 #ifdef NONLINEAR_AXES
-    if (this_axis->linked_to_primary
-    &&  this_axis->index == -this_axis->linked_to_primary->index) {
+    AXIS *primary = this_axis->linked_to_primary;
+
+    if (primary &&  this_axis->index == -primary->index) {
 	fprintf(fp, "set nonlinear %s ", axis_name(this_axis->index));
-	if (this_axis->linked_to_primary->link_udf->at)
-	    fprintf(fp, "via %s ", this_axis->linked_to_primary->link_udf->definition);
+	if (primary->link_udf->at)
+	    fprintf(fp, "via %s ", primary->link_udf->definition);
+	else
+	    fprintf(stderr, "[corrupt linkage] ");
 	if (this_axis->link_udf->at)
 	    fprintf(fp, "inverse %s ", this_axis->link_udf->definition);
+	else
+	    fprintf(stderr, "[corrupt linkage] ");
 	fputs("\n", fp);
     }
 #endif

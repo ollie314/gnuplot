@@ -1,5 +1,5 @@
 /*
- * $Id: wgdiplus.cpp,v 1.29 2016-07-27 19:38:22 markisch Exp $
+ * $Id: wgdiplus.cpp,v 1.34 2016-08-09 13:09:51 markisch Exp $
  */
 
 /*
@@ -27,6 +27,9 @@ OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
+// include iostream / cstdio _before_ syscfg.h in order
+// to avoid re-definition by wtext.h/winmain.c routines
+#include <iostream>
 extern "C" {
 # include "syscfg.h"
 }
@@ -34,16 +37,17 @@ extern "C" {
 #include <windowsx.h>
 #define GDIPVER 0x0110
 #include <gdiplus.h>
-#include <iostream>
-
 #include <tchar.h>
 #include <wchar.h>
+
 #include "wgdiplus.h"
 #include "wgnuplib.h"
 #include "winmain.h"
 #include "wcommon.h"
 using namespace Gdiplus;
-using namespace std;
+// do not use namespace std: otherwise MSVC complains about
+// ambiguous symbool bool
+//using namespace std;
 
 static bool gdiplusInitialized = false;
 static ULONG_PTR gdiplusToken;
@@ -61,6 +65,20 @@ static void gdiplusFilledPolygon(Graphics &graphics, Brush &brush, POINT *ppt, i
 static Brush * gdiplusPatternBrush(int style, COLORREF color, double alpha, COLORREF backcolor, BOOL transparent);
 static void gdiplusDot(Graphics &graphics, Brush &brush, int x, int y);
 static Font * SetFont_gdiplus(Graphics &graphics, LPRECT rect, LPGW lpgw, LPTSTR fontname, int size);
+
+
+/* Internal state of enhanced text processing.
+*/
+
+static struct {
+	Graphics * graphics; /* graphics object */
+	Font * font;
+	SolidBrush * brush;
+	StringFormat *stringformat;
+} enhstate_gdiplus;
+
+
+/* ****************  ....   ************************* */
 
 
 void
@@ -359,8 +377,8 @@ SetFont_gdiplus(Graphics &graphics, LPRECT rect, LPGW lpgw, LPTSTR fontname, int
 		fontStyle |= FontStyleStrikeout;
 	if (italic) *italic = 0;
 	if (strikeout) *strikeout = 0;
-	if (bold) * bold = 0;
-	if (underline) * underline = 0;
+	if (bold) *bold = 0;
+	if (underline) *underline = 0;
 
 #ifdef UNICODE
 	const FontFamily * fontFamily = new FontFamily(fontname);
@@ -373,7 +391,7 @@ SetFont_gdiplus(Graphics &graphics, LPRECT rect, LPGW lpgw, LPTSTR fontname, int
 	int fontHeight;
 	if (fontFamily->GetLastStatus() != Ok) {
 		delete fontFamily;
-	free(fontname);
+		free(fontname);
 #if (!defined(__MINGW32__) || defined(__MINGW64_VERSION_MAJOR))
 		// MinGW 4.8.1 does not have this
 		fontFamily = FontFamily::GenericSansSerif();
@@ -387,12 +405,18 @@ SetFont_gdiplus(Graphics &graphics, LPRECT rect, LPGW lpgw, LPTSTR fontname, int
 #endif
 #endif
 		font = new Font(fontFamily, size * lpgw->sampling, fontStyle, UnitPoint);
-		fontHeight = font->GetSize() / fontFamily->GetEmHeight(fontStyle) * graphics.GetDpiY() / 72. *
-			(fontFamily->GetCellAscent(fontStyle) + fontFamily->GetCellDescent(fontStyle));
+		double scale = font->GetSize() / fontFamily->GetEmHeight(fontStyle) * graphics.GetDpiY() / 72.;
+		/* store text metrics for later use */
+		lpgw->tmHeight = fontHeight = scale * (fontFamily->GetCellAscent(fontStyle) + fontFamily->GetCellDescent(fontStyle));
+		lpgw->tmAscent = scale * fontFamily->GetCellAscent(fontStyle);
+		lpgw->tmDescent = scale * fontFamily->GetCellDescent(fontStyle);
 	} else {
 		font = new Font(fontFamily, size * lpgw->sampling, fontStyle, UnitPoint);
-		fontHeight = font->GetSize() / fontFamily->GetEmHeight(fontStyle) * graphics.GetDpiY() / 72. *
-			(fontFamily->GetCellAscent(fontStyle) + fontFamily->GetCellDescent(fontStyle));
+		double scale = font->GetSize() / fontFamily->GetEmHeight(fontStyle) * graphics.GetDpiY() / 72.;
+		/* store text metrics for later use */
+		lpgw->tmHeight = fontHeight = scale * (fontFamily->GetCellAscent(fontStyle) + fontFamily->GetCellDescent(fontStyle));
+		lpgw->tmAscent = scale * fontFamily->GetCellAscent(fontStyle);
+		lpgw->tmDescent = scale * fontFamily->GetCellDescent(fontStyle);
 		delete fontFamily;
 	}
 
@@ -407,6 +431,84 @@ SetFont_gdiplus(Graphics &graphics, LPRECT rect, LPGW lpgw, LPTSTR fontname, int
 	lpgw->vtic = MulDiv(cy, lpgw->ymax, rect->bottom - rect->top);
 
 	return font;
+}
+
+
+static void
+EnhancedSetFont()
+{
+	if ((enhstate.lpgw->fontsize != enhstate.fontsize) ||
+	    (_tcscmp(enhstate.lpgw->fontname, enhstate.fontname) != 0)) {
+		if (enhstate_gdiplus.font)
+			delete enhstate_gdiplus.font;
+		enhstate_gdiplus.font = SetFont_gdiplus(*enhstate_gdiplus.graphics, enhstate.rect, enhstate.lpgw, enhstate.fontname, enhstate.fontsize);
+	}
+}
+
+
+static unsigned
+EnhancedTextLength(char * text)
+{
+	LPWSTR textw = UnicodeText(enhanced_text, enhstate.lpgw->encoding);
+	RectF box;
+	enhstate_gdiplus.graphics->MeasureString(textw, -1, enhstate_gdiplus.font, PointF(0, 0), enhstate_gdiplus.stringformat, &box);
+	free(textw);
+	return ceil(box.Width);
+}
+
+
+static void
+EnhancedPutText(int x, int y, char * text)
+{
+	LPWSTR textw = UnicodeText(text, enhstate.lpgw->encoding);
+	Graphics *g = enhstate_gdiplus.graphics;
+	if (enhstate.lpgw->angle == 0) {
+		PointF pointF(x, y + enhstate.lpgw->tmDescent);
+		g->DrawString(textw, -1, enhstate_gdiplus.font, pointF, enhstate_gdiplus.stringformat, enhstate_gdiplus.brush);
+	} else {
+		/* shift rotated text correctly */
+		g->TranslateTransform(x, y + enhstate.lpgw->tmDescent);
+		g->RotateTransform(-enhstate.lpgw->angle);
+		g->DrawString(textw, -1, enhstate_gdiplus.font, PointF(0,0), enhstate_gdiplus.stringformat, enhstate_gdiplus.brush);
+		g->ResetTransform();
+	}
+	free(textw);
+}
+
+
+static void
+EnhancedCleanup()
+{
+	delete enhstate_gdiplus.font;
+	delete enhstate_gdiplus.stringformat;
+}
+
+
+static void
+draw_enhanced_init(LPGW lpgw, Graphics &graphics, SolidBrush &brush, LPRECT rect)
+{
+	enhstate.set_font = &EnhancedSetFont;
+	enhstate.text_length = &EnhancedTextLength;
+	enhstate.put_text = &EnhancedPutText;
+	enhstate.cleanup = &EnhancedCleanup;
+
+	enhstate_gdiplus.graphics = &graphics;
+	enhstate_gdiplus.font = SetFont_gdiplus(graphics, rect, lpgw, lpgw->fontname, lpgw->fontsize);
+	enhstate_gdiplus.brush = &brush;
+	enhstate.res_scale = 1.;
+	HDC hdc = graphics.GetHDC();
+	if ((GetDeviceCaps(hdc, TECHNOLOGY) == DT_RASPRINTER)) {
+		HDC hdc_screen = GetDC(NULL);
+		enhstate.res_scale = (double) GetDeviceCaps(hdc, VERTRES) /
+		           (double) GetDeviceCaps(hdc_screen, VERTRES);
+		ReleaseDC(NULL, hdc_screen);
+	}
+	graphics.ReleaseHDC(hdc);
+
+	enhstate_gdiplus.stringformat = new StringFormat(StringFormat::GenericTypographic());
+	enhstate_gdiplus.stringformat->SetAlignment(StringAlignmentNear);
+	enhstate_gdiplus.stringformat->SetLineAlignment(StringAlignmentFar);
+
 }
 
 
@@ -602,7 +704,7 @@ drawgraph_gdiplus(LPGW lpgw, HDC hdc, LPRECT rect)
 		curptr = (struct GWOP *)blkptr->gwop;
 	}
 	if (curptr == NULL)
-	    return;
+		return;
 
 	while (ngwop < lpgw->nGWOP) {
 		/* transform the coordinates */
@@ -734,6 +836,7 @@ drawgraph_gdiplus(LPGW lpgw, HDC hdc, LPRECT rect)
 				draw_update_keybox(lpgw, plotno, points[0].X, points[0].Y);
 				draw_update_keybox(lpgw, plotno, points[polyi - 1].X, points[polyi - 1].Y);
 			}
+			delete [] points;
 			break;
 		}
 
@@ -870,25 +973,13 @@ drawgraph_gdiplus(LPGW lpgw, HDC hdc, LPRECT rect)
 		}
 
 		case W_enhanced_text: {
-			/* TODO: This section still uses GDI. Convert to GDI+. */
-			HDC hdc = graphics.GetHDC();
-			char * str;
-			str = (char *) LocalLock(curptr->htext);
+			char * str = (char *) LocalLock(curptr->htext);
 			if (str) {
 				RECT extend;
-
-				/* Setup GDI fonts: force re-make */
-				int save_fontsize = lpgw->fontsize;
-				lpgw->fontsize = -1;
-				GraphChangeFont(lpgw, lpgw->fontname, save_fontsize, hdc, *rect);
-				SetFont(lpgw, hdc);
-				lpgw->fontsize = save_fontsize;
-
-				/* Set GDI text color */
-				SetTextColor(hdc, last_color);
-
-				draw_enhanced_text(lpgw, hdc, rect, xdash, ydash, str);
+				draw_enhanced_init(lpgw, graphics, solid_brush, rect);
+				draw_enhanced_text(lpgw, rect, xdash, ydash, str);
 				draw_get_enhanced_text_extend(&extend);
+
 				if (keysample) {
 					draw_update_keybox(lpgw, plotno, xdash - extend.left, ydash - extend.top);
 					draw_update_keybox(lpgw, plotno, xdash + extend.right, ydash + extend.bottom);
@@ -909,7 +1000,6 @@ drawgraph_gdiplus(LPGW lpgw, HDC hdc, LPRECT rect)
 #endif
 			}
 			LocalUnlock(curptr->htext);
-			graphics.ReleaseHDC(hdc);
 			break;
 		}
 
@@ -918,7 +1008,7 @@ drawgraph_gdiplus(LPGW lpgw, HDC hdc, LPRECT rect)
 				/* Make a copy for future reference */
 				char * str = (char *) LocalLock(curptr->htext);
 				free(hypertext);
-				hypertext = UnicodeText(str, encoding);
+				hypertext = UnicodeText(str, lpgw->encoding);
 				hypertype = curptr->x;
 				LocalUnlock(curptr->htext);
 			}
@@ -1557,6 +1647,8 @@ drawgraph_gdiplus(LPGW lpgw, HDC hdc, LPRECT rect)
 		delete pattern_brush;
 	if (cb)
 		delete cb;
+	if (font)
+		delete font;
 	LocalFreePtr(ppt);
 }
 
@@ -1594,12 +1686,12 @@ SaveAsBitmap(LPGW lpgw)
 	/* ask GDI+ about supported encoders */
 	if (pImageCodecInfo == NULL)
 		if (gdiplusGetEncoders() < 0)
-			cerr << "Error:  GDI+ could not retrieve the list of encoders" << endl;
+			std::cerr << "Error:  GDI+ could not retrieve the list of encoders" << std::endl;
 #if 0
 	for (i = 0; i < nImageCodecs; i++) {
 		char * descr = AnsiText(pImageCodecInfo[i].FormatDescription, S_ENC_DEFAULT);
 		char * ext = AnsiText(pImageCodecInfo[i].FilenameExtension, S_ENC_DEFAULT);
-		cerr << i << ": " << descr << " " << ext << endl;
+		std::cerr << i << ": " << descr << " " << ext << std::endl;
 		free(descr);
 		free(ext);
 	}
@@ -1652,11 +1744,44 @@ SaveAsBitmap(LPGW lpgw)
 		char * type = AnsiText(wtype, S_ENC_DEFAULT);
 		SizeF size;
 		bitmap->GetPhysicalDimension(&size);
-		cerr << endl << "Saving bitmap: size: " << size.Width << " x " << size.Height << "  type: " << type << " ..." << endl;
+		std::cerr << std::endl << "Saving bitmap: size: " << size.Width << " x " << size.Height << "  type: " << type << " ..." << std::endl;
 		free(type);
 #endif
 		bitmap->Save(Ofn.lpstrFile, &(pImageCodecInfo[ntype].Clsid), NULL);
 		delete bitmap;
 	}
 	free(filter);
+}
+
+
+static Bitmap *
+ResizeBitmap(Bitmap &bmp, INT width, INT height)
+{
+	unsigned iheight = bmp.GetHeight();
+	unsigned iwidth = bmp.GetWidth();
+	if (width != height) {
+		double aspect = (double)iwidth / iheight;
+		if (iwidth > iheight)
+			height = static_cast<unsigned>(width / aspect);
+		else
+			width = static_cast<unsigned>(height * aspect);
+	}
+	Bitmap * nbmp = new Bitmap(width, height, bmp.GetPixelFormat());
+	Graphics graphics(nbmp);
+	graphics.DrawImage(&bmp, 0, 0, width - 1, height - 1);
+	return nbmp;
+}
+
+
+HBITMAP
+gdiplusLoadBitmap(LPWSTR file, int size)
+{
+	gdiplusInit();
+	Bitmap ibmp(file);
+	Bitmap * bmp = ResizeBitmap(ibmp, size, size);
+	HBITMAP hbitmap;
+	Color color(0, 0, 0);
+	bmp->GetHBITMAP(color, &hbitmap);
+	delete bmp;
+	return hbitmap;
 }
