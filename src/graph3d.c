@@ -1,5 +1,5 @@
 #ifndef lint
-static char *RCSid() { return RCSid("$Id: graph3d.c,v 1.347 2016-09-13 18:51:08 sfeam Exp $"); }
+static char *RCSid() { return RCSid("$Id: graph3d.c,v 1.350 2016-09-17 04:51:49 sfeam Exp $"); }
 #endif
 
 /* GNUPLOT - graph3d.c */
@@ -722,10 +722,8 @@ do_3dplot(
     if (nonlinear(&Z_AXIS))
 	zscale3d = 2.0 / (ceiling_z1 - floor_z1) * surface_zscale;
 
-    /* Allow 'set view equal xy' to adjust rendered length of the X and/or Y axes. */
-    /* FIXME EAM - This only works correctly if the coordinate system of the       */
-    /* terminal itself is isotropic.  E.g. x11 does not work because the x and y   */
-    /* coordinates always run from 0-4095 regardless of the shape of the window.   */
+    /* Allow 'set view equal xy' to adjust rendered length of the X and/or Y axes.  */
+    /* NB: only works correctly for terminals whose coordinate system is isotropic. */
     xcenter3d = ycenter3d = zcenter3d = 0.0;
     if (aspect_ratio_3D >= 2) {
 	if (yscale3d > xscale3d) {
@@ -742,10 +740,10 @@ do_3dplot(
     /* FIXME: I do not understand why this is correct */
     if (nonlinear(&Z_AXIS))
 	zcenter3d = 0.0;
-    else
     /* Without this the rotation center would be located at */
     /* the bottom of the plot. This places it in the middle.*/
-    zcenter3d =  -(ceiling_z - floor_z) / 2.0 * zscale3d + 1;
+    else
+	zcenter3d =  -(ceiling_z - floor_z) / 2.0 * zscale3d + 1;
 
     /* Needed for mousing by outboard terminal drivers */
     if (splot_map) {
@@ -2085,7 +2083,7 @@ setup_3d_box_corners()
     }
 
     quadrant = surface_rot_x / 90;
-    if (quadrant & 2) {
+    if ((quadrant & 2) && !splot_map) {
 	double temp;
 	temp = front_y;
 	front_y = back_y;
@@ -2622,7 +2620,7 @@ draw_3d_graphbox(struct surface_points *plot, int plot_num, WHICHGRID whichgrid,
 	apply_pm3dcolor(&(Z_AXIS.label.textcolor));
 
 	if (Z_AXIS.label.tag == ROTATE_IN_3D_LABEL_TAG)
-	    Z_AXIS.label.rotate = TEXT_VERTICAL;
+	    Z_AXIS.label.rotate = 90. - azimuth;
 	term->text_angle(Z_AXIS.label.rotate);
 	write_multiline(x, y, Z_AXIS.label.text,
 			h_just, v_just, Z_AXIS.label.rotate, Z_AXIS.label.font);
@@ -2642,7 +2640,7 @@ xtick_callback(
     char *text,
     int ticlevel,
     struct lp_style_type grid,		/* linetype or -2 for none */
-    struct ticmark *userlabels)	/* currently ignored in 3D plots */
+    struct ticmark *userlabels)
 {
     double scale = tic_scale(ticlevel, this_axis) * (this_axis->tic_in ? 1 : -1);
     double other_end = Y_AXIS.min + Y_AXIS.max - xaxis_y;
@@ -2765,7 +2763,7 @@ ytick_callback(
     char *text,
     int ticlevel,
     struct lp_style_type grid,
-    struct ticmark *userlabels)	/* currently ignored in 3D plots */
+    struct ticmark *userlabels)
 {
     double scale = tic_scale(ticlevel, this_axis) * (this_axis->tic_in ? 1 : -1);
     double other_end = X_AXIS.min + X_AXIS.max - yaxis_x;
@@ -2887,7 +2885,7 @@ ztick_callback(
     char *text,
     int ticlevel,
     struct lp_style_type grid,
-    struct ticmark *userlabels)	/* currently ignored in 3D plots */
+    struct ticmark *userlabels)
 {
     struct termentry *t = term;
     int len = tic_scale(ticlevel, this_axis)
@@ -2898,17 +2896,26 @@ ztick_callback(
 	map3d_xyz(0., 0., place, &v1);
     else
 	map3d_xyz(zaxis_x, zaxis_y, place, &v1);
+
+    /* Needed both for grid and for azimuth ztics */
+    map3d_xyz(right_x, right_y, place, &v3);
+
     if (grid.l_type > LT_NODRAW) {
 	(t->layer)(TERM_LAYER_BEGIN_GRID);
 	map3d_xyz(back_x, back_y, place, &v2);
-	map3d_xyz(right_x, right_y, place, &v3);
 	draw3d_line(&v1, &v2, &grid);
 	draw3d_line(&v2, &v3, &grid);
 	(t->layer)(TERM_LAYER_END_GRID);
     }
-    v2.x = v1.x + len / (double)xscaler;
-    v2.y = v1.y;
-    v2.z = v1.z;
+    if (azimuth != 0) {
+	v2.x = v1.x + (v3.x - v1.x) * len / xyscaler;
+	v2.y = v1.y + (v3.y - v1.y) * len / xyscaler;
+	v2.z = v1.z + (v3.z - v1.z) * len / xyscaler;
+    } else {
+	v2.x = v1.x + len / (double)xscaler;
+	v2.y = v1.y;
+	v2.z = v1.z;
+    }
     v2.real_z = v1.real_z;
     draw3d_line(&v1, &v2, &border_lp);
 
@@ -2948,12 +2955,19 @@ ztick_callback(
     }
 
     if (Z_AXIS.ticmode & TICS_MIRROR) {
-	map3d_xyz(right_x, right_y, place, &v1);
-	v2.x = v1.x - len / (double)xscaler;
-	v2.y = v1.y;
-	v2.z = v1.z;
-	v2.real_z = v1.real_z;
-	draw3d_line(&v1, &v2, &border_lp);
+	if (azimuth != 0) {
+	    v2.x = v3.x + (v1.x - v3.x) * len / xyscaler;
+	    v2.y = v3.y + (v1.y - v3.y) * len / xyscaler;
+	    v2.z = v3.z + (v1.z - v3.z) * len / xyscaler;
+	    draw3d_line(&v3, &v2, &border_lp);
+	} else {
+	    map3d_xyz(right_x, right_y, place, &v1);
+	    v2.x = v1.x - len / (double)xscaler;
+	    v2.y = v1.y;
+	    v2.z = v1.z;
+	    v2.real_z = v1.real_z;
+	    draw3d_line(&v1, &v2, &border_lp);
+	}
     }
 }
 

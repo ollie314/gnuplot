@@ -1,8 +1,109 @@
+2016-09-24  Ethan A Merritt  <merritt@u.washington.edu>
+
+	* term/post.trm: postscript terminal support for rotation of boxed text.
+	This happens to also remove incompatibility of "set minussign" and
+	"set term post noadobeglyphnames" and utf8 encoding.
+
+2016-09-24 Akira Kakuto <kakuto@fuk.kindai.ac.jp>
+
+	* src/wxterminal/wxt_gui.cpp (OnExport):  VS2010 does not accept
+	splitting the string argument for wxT().
+
+2016-09-23  Bastian Maerkisch  <bmaerkisch@web.de>
+
+	* src/win/wgraph.c (MakeFonts):  Calculation of hchar and vtic lost
+	precision.  Bugfix.
+
+2016-09-23  Bastian Maerkisch  <bmaerkisch@web.de>
+
+	* src/win/wgdiplus.cpp (EnhancedPutText):  Fix reference of rotation
+	for enhanced text.
+
+	* src/win/wgraph.c src/win/wgdiplus.cpp:  Positioning of rotated text
+	depends on the currently selected font and in particular on the font
+	size.  Bugfix.
+
+	* src/win/wgdiplus.cpp:  Take fontscale into account. Bugfix.
+
+2016-09-23  Ethan A Merritt  <merritt@u.washington.edu>
+
+	* term/svg.trm (SVG_image): Image support was conditional on png support
+	but this can be relaxed for in-line images.
+
+	* src/gadgets.c (write_label): If current textbox style has neither a
+	border nor fill, then the "boxed" attribute can be ignored.
+
+	* src/plot2d.c (cp_alloc): Initialize filledcurve_options to those from
+	"set style data".
+
+2016-09-22  Per Bothner  <per@bothner.com>
+
+	* term/svg.trm (SVG_image): In domterm mode an embedded image should
+	always be inline rather than linking to an external file.
+
+2016-09-22  Bastian Maerkisch  <bmaerkisch@web.de>
+
+	* src/wxterminal/wxt_gui.cpp|h:  Add "print" toolbar button. For now,
+	it is only available on Windows, but support could in principle be
+	added for other platforms. See feature request #304.
+
+	* src/wxterminal/wxt_gui.cpp:  Eliminate warnings about unused
+	variables. Used define _WIN32 to test for Windows platform.
+
+	* src/wxterminal/wxt_gui.cpp (wxtFrame::OnExport):  Save as enhanced
+	metafile (emf). Only available on Windows.
+
+2016-09-21  Ethan A Merritt  <merritt@u.washington.edu>
+
+	* src/qtterminal/QtGnuplotScene.h src/qtterminal/QtGnuplotScene.cpp:
+	qt terminal support for rotation of boxed text.
+
+	* src/wxterminal/gp_cairo.c:
+	cairo/wxt terminal support for rotation of boxed text.
+
+2016-09-18  Ethan A Merritt  <merritt@u.washington.edu>
+
+	* src/internal.c src/eval.h src/eval.c src/internal.h src/parse.c
+	docs/gnuplot.doc:  New cardinality operator |A| reports number of
+	entries in array A.   Example:  plot for [i = 1 : |A|] f(A[i])
+
+2016-09-16  Ethan A Merritt  <merritt@u.washington.edu>
+
+	* src/getcolor.c src/save.c src/show.c:  Remove unreachable case
+	statements in color mode switch.  The fprintf warning they contained
+	would have accessed uninitialized memory (found by canalyze static
+	code analysis tool).
+
+	* src/graph3d.c: Remove out-of-date comments.
+
+	* src/graph3d.c (ztick_callback):  orientation of z-axis tick marks
+	changes with azimuth.  "set zlabel rotate parallel" also.
+
+2016-09-15  Ethan A Merritt  <merritt@u.washington.edu>
+
+	* src/set.c docs/gnuplot.doc:  Ignore "set termopt {dashed|solid}".
+	Remove use of this option from examples in the manual.
+
+2016-09-14  Ethan A Merritt  <merritt@u.washington.edu>
+
+	* src/multiplot.c:  Allow "boxed" attribute in the title for a multiplot
+	layout. Example:  set multiplot layout 2,2 title "Example" boxed
+
+2016-09-14  Bastian Maerkisch  <bmaerkisch@web.de>
+
+	* src/win/wgraph.c (drawgraph):  Fix a GDI resource leak which is
+	only important when opening and closing a massive number of different
+	graph windows.
+
 2016-09-13  Ethan A Merritt  <merritt@u.washington.edu>
 
-	*src/boundary.c src/graph3d.c src/set.c:  Write plot titles using the 
-	general routine write_label() rather than in-line code.  This allows
-	support for additional text properties, in particular "boxed".
+	* src/boundary.c src/graph3d.c src/set.c src/unset.c:  Write plot titles
+	using the general routine write_label() rather than in-line code.
+	This allows use of additional text properties, in particular "boxed".
+
+	* src/graph3d.c (setup_3d_box_corners):  2016-09-06 revision to which
+	plot edges have tic labels attached should not have been applied to
+	"set view map" mode.
 
 2016-09-12  Bastian Maerkisch  <bmaerkisch@web.de>
 

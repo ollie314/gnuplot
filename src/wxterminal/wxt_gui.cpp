@@ -1,5 +1,5 @@
 /*
- * $Id: wxt_gui.cpp,v 1.158 2016-08-26 04:16:10 sfeam Exp $
+ * $Id: wxt_gui.cpp,v 1.162 2016-09-24 08:57:08 markisch Exp $
  */
 
 /* GNUPLOT - wxt_gui.cpp */
@@ -117,8 +117,9 @@
 #include "bitmaps/png/config_png.h"
 #include "bitmaps/png/help_png.h"
 
-/* standard icon art from wx (used only for "Export to file" */
+/* standard icon art from wx */
 #include <wx/artprov.h>
+#include <wx/printdlg.h>
 
 extern "C" {
 #ifdef HAVE_CONFIG_H
@@ -164,7 +165,7 @@ wxtAnchorPoint wxt_display_anchor = {0,0,0};
 #define wxt_update_anchors(x,y,size)
 #endif
 
-#if defined(WXT_MONOTHREADED) && !defined(_Windows)
+#if defined(WXT_MONOTHREADED) && !defined(_WIN32)
 static int yield = 0;	/* used in wxt_waitforinput() */
 #endif
 
@@ -192,6 +193,9 @@ BEGIN_EVENT_TABLE( wxtFrame, wxFrame )
 	EVT_CLOSE( wxtFrame::OnClose )
 	EVT_SIZE( wxtFrame::OnSize )
 	EVT_TOOL( Toolbar_ExportToFile, wxtFrame::OnExport )
+#ifdef WXT_PRINT
+	EVT_TOOL( Toolbar_Print, wxtFrame::OnPrint )
+#endif
 	/* Clipboard widget (should consolidate this with Export to File) */
 	EVT_TOOL( Toolbar_CopyToClipboard, wxtFrame::OnCopy )
 #ifdef USE_MOUSE
@@ -445,6 +449,11 @@ wxtFrame::wxtFrame( const wxString& title, wxWindowID id )
 	toolbar->AddTool(Toolbar_ExportToFile, wxT("Export"),
 				wxArtProvider::GetBitmap(wxART_FILE_SAVE_AS, wxART_TOOLBAR),
 				wxT("Export plot to file"));
+#ifdef WXT_PRINT
+	toolbar->AddTool(Toolbar_Print, wxT("Print"),
+				wxArtProvider::GetBitmap(wxART_PRINT, wxART_TOOLBAR),
+				wxT("Print plot"));
+#endif
 #ifdef USE_MOUSE
 #ifdef __WXOSX_COCOA__
 	/* wx 2.9 Cocoa bug & crash workaround for Lion, which does not have toolbar separators anymore */
@@ -517,7 +526,11 @@ void wxtFrame::OnExport( wxCommandEvent& WXUNUSED( event ) )
 
 	wxFileDialog exportFileDialog (this, wxT("Exported File Format"),
 		saveDir, wxT(""),
+#ifdef __WXMSW__
+		wxT("PNG files (*.png)|*.png|PDF files (*.pdf)|*.pdf|SVG files (*.svg)|*.svg|Enhanced Metafile (*.emf)|*.emf"),
+#else
 		wxT("PNG files (*.png)|*.png|PDF files (*.pdf)|*.pdf|SVG files (*.svg)|*.svg"),
+#endif
 		wxFD_SAVE|wxFD_OVERWRITE_PROMPT);
 	exportFileDialog.SetFilterIndex(userFilterIndex);
 
@@ -598,6 +611,43 @@ void wxtFrame::OnExport( wxCommandEvent& WXUNUSED( event ) )
 		break;
 #endif
 
+#ifdef __WXMSW__
+	case 3: {
+		/* Save as Enhanced Metafile. */
+		save_cr = panel->plot.cr;
+		cairo_save(save_cr);
+
+		RECT rect;
+		rect.left = rect.top = 0;
+		unsigned dpi = GetDPI();
+		rect.right  = MulDiv(panel->plot.device_xmax, dpi, 10);
+		rect.bottom = MulDiv(panel->plot.device_ymax, dpi, 10);
+		HDC hmf = CreateEnhMetaFileW(NULL, fullpathFilename.wc_str(), &rect, NULL);
+		// The win32_printing surface makes an effort to use the GDI API wherever possible,
+		// which should reduce the file size in many cases. 
+		surface = cairo_win32_printing_surface_create(hmf);
+		if (cairo_surface_status(surface) != CAIRO_STATUS_SUCCESS) {
+			fprintf(stderr, "Cairo error: could not create surface for metafile.\n");
+			cairo_surface_destroy(surface);
+		} else {
+			panel->plot.cr = cairo_create(surface);
+			cairo_scale(panel->plot.cr,
+				1. / panel->plot.oversampling_scale,
+				1. / panel->plot.oversampling_scale);
+
+			panel->wxt_cairo_refresh();
+			cairo_show_page(panel->plot.cr);
+			cairo_surface_destroy(surface);
+			cairo_surface_finish(surface);
+			panel->plot.cr = save_cr;
+			cairo_restore(panel->plot.cr);
+		}
+		HENHMETAFILE hemf = CloseEnhMetaFile(hmf);
+		DeleteEnhMetaFile(hemf);
+		break;
+	}
+#endif
+
 	default :
 		fprintf(stderr, "Can't save in that file type.\n");
 		break;
@@ -606,6 +656,60 @@ void wxtFrame::OnExport( wxCommandEvent& WXUNUSED( event ) )
 	/* Save user environment selections. */
 	userFilterIndex = exportFileDialog.GetFilterIndex();
 }
+
+#ifdef WXT_PRINT
+/* toolbar event : Print
+ */
+void wxtFrame::OnPrint( wxCommandEvent& WXUNUSED( event ) )
+{
+	wxPrintDialogData printDialogData(printData);
+	printDialogData.EnablePageNumbers(false);
+	wxPrintDialog printDialog(this, &printDialogData);
+
+	if (printDialog.ShowModal() == wxID_CANCEL)
+		return;
+
+	wxDC* wxdc = printDialog.GetPrintDC();
+	wxdc->StartDoc(GetTitle());
+	wxdc->StartPage();
+
+	cairo_t* save_cr = panel->plot.cr;
+	cairo_save(save_cr);
+	cairo_surface_t *surface = NULL;
+#ifdef _WIN32
+	HDC hdc = (HDC) wxdc->GetHandle();
+	surface = cairo_win32_printing_surface_create(hdc);
+#endif
+	if (cairo_surface_status(surface) != CAIRO_STATUS_SUCCESS) {
+		fprintf(stderr, "Cairo error: could not create surface for printer.\n");
+		cairo_surface_destroy(surface);
+	} else {
+		panel->plot.cr = cairo_create(surface);
+		// scale the plot according to the ratio of printer and screen dpi
+		wxSize ppi = wxdc->GetPPI();
+		unsigned dpi = 96;
+#ifdef _WIN32
+		dpi = GetDPI();
+#endif
+		double scaleX = ppi.GetWidth() / (double) dpi;
+		double scaleY = ppi.GetHeight() / (double) dpi;
+		cairo_surface_set_fallback_resolution(surface, ppi.GetWidth(), ppi.GetHeight());
+		cairo_scale(panel->plot.cr,
+			scaleX / panel->plot.oversampling_scale,
+			scaleY / panel->plot.oversampling_scale);
+		panel->wxt_cairo_refresh();
+		cairo_show_page(panel->plot.cr);
+		cairo_surface_destroy(surface);
+		cairo_surface_finish(surface);
+
+		panel->plot.cr = save_cr;
+		cairo_restore(panel->plot.cr);
+	}
+	wxdc->EndPage();
+	wxdc->EndDoc();
+	delete wxdc;
+}
+#endif
 
 /* toolbar event : Copy to clipboard
  * We will copy the panel to a bitmap, using platform-independant wxWidgets functions */
@@ -728,7 +832,7 @@ void wxtFrame::OnClose( wxCloseEvent& event )
 		this->Destroy();
 	}
 
-#if defined(_Windows) && !defined(WGP_CONSOLE)
+#if defined(_WIN32) && !defined(WGP_CONSOLE)
 	/* Close text window if this was the last plot window. */
 	WinPersistTextClose();
 #endif
@@ -1378,6 +1482,7 @@ static void wxt_initialize_key_boxes(int i)
 		wxt_key_boxes[i].right = wxt_key_boxes[i].ytop = 0;
 	}
 }
+
 static void wxt_initialize_hidden(int i)
 {
 	for (; i<wxt_max_key_boxes; i++)
@@ -1553,7 +1658,7 @@ void wxtPanel::RaiseConsoleWindow()
 	}
 #endif /* USE_GTK */
 
-#ifdef WIN32
+#ifdef _WIN32
 	WinRaiseConsole();
 #endif
 
@@ -2097,7 +2202,7 @@ void wxt_reset()
 	/* sent when gnuplot exits and when the terminal or the output change.*/
 	FPRINTF((stderr,"wxt_reset\n"));
 
-#if defined(WXT_MONOTHREADED) && !defined(_Windows)
+#if defined(WXT_MONOTHREADED) && !defined(_WIN32)
 	yield = 0;
 #endif
 
@@ -3748,7 +3853,7 @@ bool wxt_exec_event(int type, int mx, int my, int par1, int par2, wxWindowID id)
 	event.par2 = par2;
 	event.winid = id;
 
-#if defined(_Windows)
+#if defined(_WIN32)
 	wxt_process_one_event(&event);
 	return true;
 #elif defined(WXT_MONOTHREADED)
@@ -3863,7 +3968,7 @@ int wxt_waitforinput(int options)
  * the terminal events are directly processed when they are received */
 int wxt_waitforinput(int options)
 {
-#ifdef _Windows
+#ifdef _WIN32
 	if (options == TERM_ONLY_CHECK_MOUSING) {
 		WinMessageLoop();
 		return NUL;
@@ -3884,7 +3989,7 @@ int wxt_waitforinput(int options)
 	} else
 		return getch();
 
-#else /* !_Windows */
+#else /* !_WIN32 */
 	/* Generic hybrid GUI & console message loop */
 	/* (used mainly on MacOSX - still single threaded) */
 	if (yield)
@@ -3962,8 +4067,9 @@ TBOOLEAN wxt_window_opened(void)
  * all the plot windows are closed. */
 void wxt_atexit()
 {
-	int i;
+#ifndef _WIN32
 	int openwindows = 0;
+#endif
 	int persist_setting;
 
 	if (wxt_status == STATUS_UNINITIALIZED)
@@ -4017,12 +4123,12 @@ void wxt_atexit()
 
 	FPRINTF((stderr,"wxt_atexit: handling \"persist\" setting\n"));
 
-#ifdef _Windows
+#ifdef _WIN32
 	if (!persist_cl) {
 		interactive = TRUE;
 		while (!com_line());
 	}
-#else /*_Windows*/
+#else /*_WIN32*/
 
 	/* process events directly */
 	wxt_handling_persist = true;
@@ -4038,6 +4144,7 @@ void wxt_atexit()
 	/* declare the iterator */
 	std::vector<wxt_window_t>::iterator wxt_iter;
 
+	int i;
 	for(wxt_iter = wxt_window_list.begin(), i=0;
 			wxt_iter != wxt_window_list.end(); wxt_iter++, i++)
 	{
@@ -4089,7 +4196,7 @@ void wxt_atexit()
 				  "has PID %d\n", pid));
 	}
 # endif /* HAVE_WORKING_FORK */
-#endif /* !_Windows */
+#endif /* !_WIN32 */
 
 	/* cleanup and quit */
 	wxt_cleanup();
