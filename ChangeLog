@@ -1,3 +1,38 @@
+2016-09-28  Bastian Maerkisch  <bmaerkisch@web.de>
+
+	* src/mousecmn.h src/qtterminal/qt_term.cpp 
+	src/qtterminal/QtGnuplotEvent.h src/qtterminal/QtGnuplotWindow.cpp|h:
+	Enable space-raises-console and terminal option "raise" for qt on
+	Windows.  Since gnuplot and the qt terminal are realized as two
+	different processes, the currently active process has to allow the other
+	to "raise" itself.
+
+	* src/win/winmain.c:  Change only the state of minimised windows when
+	raising text or graph windows.  In particular that does leave
+	maximised windows as they are.
+
+2016-09-27  Ethan A Merritt  <merritt@u.washington.edu>
+
+	* src/boundary.c: Use the shared routine write_label() to handle the 2D
+	x, y, x2, and y2 axis labels rather than separate in-line code for each.
+	This allows additional text properties for the axis labels, notably
+	"boxed".  However this changes the effect of setting an offset for y, y2
+	axis labels.  Previously this altered placement of the plot borders
+	while leaving the absolute placement of the axis label on the page
+	unchanged.  Now the plot borders remain fixed but the axis label moves.
+	Bug #1550
+
+	* term/svg.trm: Revert 2016-09-23 "in line images do not require png
+	support".  Actually, they do.
+
+	* src/plot2d.c (eval_plots):  Initialize fillcolor.
+
+	* src/color.c: Use the shared routine write_label() to handle the 2D
+	cb axis label.
+
+	* src/stats.c: Do not use columnheader as a prefix for "stats" unless it
+	is specifically requested. 
+
 2016-09-25  Ethan A Merritt  <merritt@u.washington.edu>
 
 	* src/pm3d.c (set_plot_with_palette): When checking for plot elements 
@@ -14,7 +49,7 @@
 	* src/wxterminal/wxt_gui.cpp (OnExport):  VS2010 does not accept
 	splitting the string argument for wxT().
 
-2016-09-23  Bastian Maerkisch  <bmaerkisch@web.de>
+2016-09-24  Bastian Maerkisch  <bmaerkisch@web.de>
 
 	* src/win/wgraph.c (MakeFonts):  Calculation of hchar and vtic lost
 	precision.  Bugfix.
