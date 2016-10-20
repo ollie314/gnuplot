@@ -1,4 +1,4 @@
-C RCS $Id: gnuplot.doc,v 1.1024 2016-09-21 20:57:04 sfeam Exp $
+C RCS $Id: gnuplot.doc,v 1.1027 2016-10-10 22:53:38 sfeam Exp $
 C
 C Copyright (C) 1986 - 1993, 1998, 1999, 2000, 2001, 2004   Thomas Williams, Colin Kelley et al.
 C
@@ -267,11 +267,14 @@ C
  * Shell invocation of gnuplot can pass parameters to a gnuplot script.
  gnuplot -c scriptfile.gp ARG1 ARG2 ARG3 ...
 
- * New command `set minussign` causes routine gprintf() to use a typographic
- character "minus sign" rather than a hyphen for negative numbers.  This affects
- only axis tic labels and strings explicitly created with gprintf(). This 
- command first appeared in version 5.0 patchlevel 5 and is considered EXPERIMENTAL
- (implementation details may change).
+ * New commands `set minussign` and `set micro` cause routine gprintf() to use a
+ typographic character "minus sign" rather than a hyphen for negative numbers, 
+ and "micro sign" rather than "u" for prefixing units in scientific notation.
+ This affects only axis tic labels and strings explicitly created with gprintf().
+ The specific byte sequence used to represent these characters depends on the 
+ current encoding.
+ The `set minus`  command first appeared in version 5.0 patchlevel 5 and is
+ considered EXPERIMENTAL (implementation details may change).
 
 3 New commands
 #start
@@ -293,6 +296,7 @@ C
 # set view map {scale}                     # allows resizing a 3D projection plot
 # set multiplot {next|previous}            # navigate within the auto-layout grid
 # set minussign                            # use typographic "minus sign", not hyphen
+# set micro                                # use typographic "micro sign", not "u"
 #end
 
 2 Differences from version 4
@@ -1140,18 +1144,27 @@ C marker below is used to signal this to doc2html:
 %atanh(x)@any@$tanh sup -1 x$ (inverse hyperbolic tangent) in radians
  The `atanh(x)` function returns the inverse hyperbolic tangent of its
  argument in radians.
+?expressions functions EllipticK
+?EllipticK
 4 EllipticK
 #EllipticK(k) & real k $\in$ (-1:1) & $K(k)$ complete elliptic integral of the first kind \\
 %EllipticK(k)@real k in (-1:1)@$K ( k )$ complete elliptic integral of the first kind
- See `elliptic integrals`.
+ The `EllipticK(k)` function returns the complete elliptic integral of the
+ first kind. See `elliptic integrals` for more details.
+?expressions functions EllipticE
+?EllipticE
 4 EllipticE
 #EllipticE(k) & real k $\in$ [-1:1] & $E(k)$ complete elliptic integral of the second kind \\
 %EllipticE(k)@real k in [-1:1]@ $E ( k )$ complete elliptic integral of the second kind
- See `elliptic integrals`.
+ The `EllipticE(k)` function returns the complete elliptic integral of the
+ second kind. See `elliptic integrals` for more details.
+?expressions functions EllipticPi
+?EllipticPi
 4 EllipticPi
 #EllipticPi(n,k) & real n$<$1, real k $\in$ (-1:1) & $\Pi(n,k)$ complete elliptic integral of the third kind \\
 %EllipticPi(n,k)@ real n<1, real k in (-1:1)@ $Pi ( n,k )$ complete elliptic integral of the third kind
- See `elliptic integrals`.
+ The `EllipticPi(n,k)` function returns the complete elliptic integral of the
+ third kind. See `elliptic integrals` for more details.
 4 besj0
 ?expressions functions besj0
 ?besj0
@@ -1306,9 +1319,9 @@ C marker below is used to signal this to doc2html:
 ?lambertw
 #lambertw(x) & real & Lambert W function \\
 %lambertw(x)@real@Lambert W function
- The lambertw function returns the value of the principal branch of
- Lambert's W function, which is defined by the equation (W(z)*exp(W(z))=z.
- z must be a real number with z >= -exp(-1).
+ The `lambertw(x)` function returns the value of the principal branch of
+ Lambert's W function, which is defined by the equation (W(x)*exp(W(x))=x.
+ x must be a real number with x >= -exp(-1).
 4 lgamma
 ?expressions functions lgamma
 ?lgamma
@@ -1342,7 +1355,7 @@ C marker below is used to signal this to doc2html:
 ?rand
 #rand(x) & int & pseudo random number in the interval [0:1] \\
 %rand(x)@int@pseudo random number in the interval [0:1]
- `rand(0)` returns a pseudo random number in the interval [0:1].
+ The `rand(x)` function returns a pseudo random number in the interval [0:1].
  See `random` for more details.
 4 real
 ?expressions functions real
@@ -1436,8 +1449,8 @@ C marker below is used to signal this to doc2html:
 ?faddeeva
 %faddeeva(z)@complex@rescaled complex error function w(z) = exp(-z^2) * erfc(-i*z)
 #faddeeva(z)&complex&rescaled complex error function $w(z) = e^{-z^2}~ erfc(-iz) $ \\
- `Faddeeva(z)` returns the rescaled complex error function 
-  w(z) = exp(-z^2) * erfc(-i*z)
+ The `faddeeva(z)` function returns the rescaled complex error function 
+ faddeeva(z) = exp(-z^2) * erfc(-i*z)
  This corresponds to Eqs 7.1.3 and 7.1.4 of Abramowitz and Stegun.
 4 erfi
 ?expressions functions erfi
@@ -1581,7 +1594,7 @@ C marker below is used to signal this to doc2html:
 ?exists
 #exists("X") & string & returns 1 if a variable named X is defined, 0 otherwise. \\
 %exists("X")@string@returns 1 if a variable named X is defined, 0 otherwise.
- The argument to exists() is a string constant or a string variable;
+ The argument to `exists()` is a string constant or a string variable;
  if the string contains the name of a defined variable, the function returns 1.
  Otherwise the function returns 0.
 4 hsv2rgb
@@ -1590,7 +1603,8 @@ C marker below is used to signal this to doc2html:
 ?hsv
 #hsv2rgb(h,s,v) & h,s,v $\in$ [0:1] & 24bit RGB color value. \\
 %hsv2rgb(h,s,v)@h,s,v in [0:1]@24bit RGB color value.
- The HSV (Hue/Saturation/Value) triplet is converted to an equivalent RGB value.
+ The `hsv2rgb(h,s,v)` function converts HSV (Hue/Saturation/Value) triplet
+ to an equivalent RGB value.
 4 stringcolumn
 ?expressions functions stringcolumn
 ?stringcolumn
@@ -1599,7 +1613,8 @@ C marker below is used to signal this to doc2html:
 #stringcolumn(x) & int or string & content of column $x$ as a string. \\
 %stringcolumn(x)@int or string@content column $x$ as a string.
  `stringcolumn(x)` may be used only in expressions as part of `using` manipulations
- to fits or datafile plots.  It returns the content of column x as a string variable.
+ to fits or datafile plots.  It returns the content of column x as a string variable. 
+ `strcol(x)` is shorthand for `stringcolumn(x)`.
  See `plot datafile using`.
 4 timecolumn
 ?expressions functions timecolumn
@@ -1614,70 +1629,70 @@ C marker below is used to signal this to doc2html:
  Note: prior to version 5 this function took only a single parameter and worked only
  for columns that contained purely an axis coordinate.
 4 tm_hour
-?expressions tm_hour
+?expressions functions tm_hour
 ?tm_hour
 #tm\_hour(x) & int & the hour \\
 %tm_hour(x)@int@the hour
- The `tm_hour` function interprets its argument as a time, in seconds from
+ The `tm_hour(x)` function interprets its argument as a time, in seconds from
  1 Jan 1970.  It returns the hour (an integer in the range 0--23) as a real.
 4 tm_mday
-?expressions tm_mday
+?expressions functions tm_mday
 ?tm_mday
 #tm\_mday(x) & int & the day of the month \\
 %tm_mday(x)@int@the day of the month
- The `tm_mday` function interprets its argument as a time, in seconds from
+ The `tm_mday(x)` function interprets its argument as a time, in seconds from
  1 Jan 1970.  It returns the day of the month (an integer in the range 1--31)
  as a real.
 4 tm_min
-?expressions tm_min
+?expressions functions tm_min
 ?tm_min
 #tm\_min(x) & int & the minute \\
 %tm_min(x)@int@the minute
- The `tm_min` function interprets its argument as a time, in seconds from
+ The `tm_min(x)` function interprets its argument as a time, in seconds from
  1 Jan 1970.  It returns the minute (an integer in the range 0--59) as a real.
 4 tm_mon
-?expressions tm_mon
+?expressions functions tm_mon
 ?tm_mon
 #tm\_mon(x) & int & the month \\
 %tm_mon(x)@int@the month
- The `tm_mon` function interprets its argument as a time, in seconds from
+ The `tm_mon(x)` function interprets its argument as a time, in seconds from
  1 Jan 1970.  It returns the month (an integer in the range 0--11) as a real.
 4 tm_sec
-?expressions tm_sec
+?expressions functions tm_sec
 ?tm_sec
 #tm\_sec(x) & int & the second \\
 %tm_sec(x)@int@the second
- The `tm_sec` function interprets its argument as a time, in seconds from
+ The `tm_sec(x)` function interprets its argument as a time, in seconds from
  1 Jan 1970.  It returns the second (an integer in the range 0--59) as a real.
 4 tm_wday
-?expressions tm_wday
+?expressions functions tm_wday
 ?tm_wday
 #tm\_wday(x) & int & the day of the week \\
 %tm_wday(x)@int@the day of the week
- The `tm_wday` function interprets its argument as a time, in seconds from
+ The `tm_wday(x)` function interprets its argument as a time, in seconds from
  1 Jan 1970.  It returns the day of the week (an integer in the range 0--6) as
  a real.
 4 tm_yday
-?expressions tm_yday
+?expressions functions tm_yday
 ?tm_yday
 #tm\_yday(x) & int & the day of the year \\
 %tm_yday(x)@int@the day of the year
- The `tm_yday` function interprets its argument as a time, in seconds from
+ The `tm_yday(x)` function interprets its argument as a time, in seconds from
  1 Jan 1970.  It returns the day of the year (an integer in the range 1--366)
  as a real.
 4 tm_year
-?expressions tm_year
+?expressions functions tm_year
 ?tm_year
 #tm\_year(x) & int & the year \\
 %tm_year(x)@int@the year
- The `tm_year` function interprets its argument as a time, in seconds from
+ The `tm_year(x)` function interprets its argument as a time, in seconds from
  1 Jan 1970.  It returns the year (an integer) as a real.
 4 time
-?expressions time
+?expressions functions time
 ?time
 #time(x) & any & the current system time \\
 %time(x)@any@the current system time
- The `time` function returns the current system time. This value can be 
+ The `time(x)` function returns the current system time. This value can be
  converted to a date string with the `strftime` function, or it can be used
  in conjunction with `timecolumn` to generate relative time/date plots. 
  The type of the argument determines what is returned. If the argument is an
@@ -1698,7 +1713,6 @@ C marker below is used to signal this to doc2html:
 @end table
 
 4 elliptic integrals
-?expressions functions elliptic integrals
 ?elliptic integrals
 =elliptic integrals
  The `EllipticK(k)` function returns the complete elliptic integral of the first
@@ -3343,12 +3357,12 @@ Ffigure_boxplot
  These default properties may be changed using the `set style boxplot` command.
  See `set style boxplot`, `bars`, `boxwidth`, `fillstyle`, `candlesticks`.
 
-2 boxxyerrorbars
-?plotting styles boxxyerrorbars
-?style boxxyerrorbars
-?boxxyerrorbars
-Ffigure_boxxyerrorbars
- The `boxxyerrorbars` style is only relevant to 2D data plotting.  It is similar
+2 boxxyerror
+?plotting styles boxxyerror
+?style boxxyerror
+?boxxyerror
+Ffigure_boxxyerror
+ The `boxxyerror` style is only relevant to 2D data plotting.  It is similar
  to the `xyerrorbars` style except that it draws rectangular areas rather than
  simple crosses.  It uses either 4 or 6 basic columns of input data.
  Additional input columns may be used to provide information such as
@@ -3361,6 +3375,9 @@ Ffigure_boxxyerrorbars
  way as they are for the `xyerrorbars` style---either from xlow to xhigh and
  from ylow to yhigh, or from x-xdelta to x+xdelta and from y-ydelta to
  y+ydelta, depending on how many data columns are provided.
+
+ The 6 column form of the command provides a convenient way to plot rectangles
+ with arbitraty x and y bounds.
 
  An additional (5th or 7th) input column may be used to provide variable 
  (per-datapoint) color information (see `linecolor` and `rgbcolor variable`).
@@ -7107,7 +7124,7 @@ Ffigure_jitter
  or
       boxes            boxplot        ellipses       image
       boxerrorbars     candlesticks   filledcurves   rgbimage
-      boxxyerrorbars   circles        histograms     rgbalpha   pm3d
+      boxxyerror       circles        histograms     rgbalpha   pm3d
  or
       table
 
@@ -10325,6 +10342,23 @@ Ffigure_multiple_keys
  labels will be included in either the margin calculation or the calculation
  of the positions of other text to be written in the margin.  This can lead
  to tic labels overwriting other text if the axis is very close to the border.
+3 micro
+?commands set micro
+?commands show micro
+?commands unset micro
+?set micro
+?show micro
+?unset micro
+?micro
+ By default the "%c" format specifier for scientific notation used to generate
+ axis tick labels uses a lower case u as a prefix to indicate "micro" (10^-6).
+ The `set micro` command tells gnuplot to use a different typographic 
+ character (unicode U+00B5).  The byte sequence used to represent this character
+ depends on the current encoding.  See `format specifiers`, `encoding`.
+
+ This command is EXPERIMENTAL. It has known limitations and implementation
+ details may change.
+
 3 minussign
 ?commands set minussign
 ?commands show minussign
@@ -10353,9 +10387,7 @@ Ffigure_multiple_keys
  terminals, as LaTeX has its own mechanism for handling minus signs.
  It also is not necessary when using the postscript terminal because the 
  postscript prologue output by gnuplot remaps the ascii hyphen code \055 to a
- different glyph named `minus`.  If you want to use the postscript terminal
- while `set minussign` is active,  you will probably need to select the option
- `set term post adobeglyphnames`.
+ different glyph named `minus`.
 
  This command is EXPERIMENTAL. It has known limitations and implementation
  details may change.

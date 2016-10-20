@@ -1,5 +1,5 @@
 /*
- * $Id: wxt_gui.cpp,v 1.162 2016-09-24 08:57:08 markisch Exp $
+ * $Id: wxt_gui.cpp,v 1.165 2016-10-13 23:16:46 sfeam Exp $
  */
 
 /* GNUPLOT - wxt_gui.cpp */
@@ -677,7 +677,7 @@ void wxtFrame::OnPrint( wxCommandEvent& WXUNUSED( event ) )
 	cairo_save(save_cr);
 	cairo_surface_t *surface = NULL;
 #ifdef _WIN32
-	HDC hdc = (HDC) wxdc->GetHandle();
+	HDC hdc = (HDC) wxdc->GetHDC();
 	surface = cairo_win32_printing_surface_create(hdc);
 #endif
 	if (cairo_surface_status(surface) != CAIRO_STATUS_SUCCESS) {
@@ -908,8 +908,6 @@ wxtPanel::wxtPanel( wxWindow *parent, wxWindowID id, const wxSize& size )
 #if defined(GTK_SURFACE)
 	gdkpixmap = NULL;
 #elif defined(__WXMSW__)
-	hdc = NULL;
-	hbm = NULL;
 #else /* IMAGE_SURFACE */
 	cairo_bitmap = NULL;
 	data32 = NULL;
@@ -1039,7 +1037,7 @@ void wxtPanel::DrawToDC(wxDC &dc, wxRegion &region)
 #elif defined(__WXMSW__)
 	// Need to flush to make sure the bitmap is fully drawn.
 	cairo_surface_flush(cairo_get_target(plot.cr));
-	BitBlt((HDC) dc.GetHDC(), 0, 0, plot.device_xmax, plot.device_ymax, hdc, 0, 0, SRCCOPY);
+	BitBlt((HDC) dc.GetHDC(), 0, 0, plot.device_xmax, plot.device_ymax, cairo_win32_surface_get_dc(cairo_get_target(plot.cr)), 0, 0, SRCCOPY);
 #else
 	dc.DrawBitmap(*cairo_bitmap, 0, 0, false);
 #endif
@@ -3003,7 +3001,9 @@ void wxtPanel::wxt_cairo_refresh()
 		wxt_cairo_draw_hypertext();
 
 #ifdef IMAGE_SURFACE
+	command_list_mutex.Lock();
 	wxt_cairo_create_bitmap();
+	command_list_mutex.Unlock();
 #endif /* !have_gtkcairo */
 
 	/* draw the pixmap to the screen */
@@ -3657,38 +3657,20 @@ int wxtPanel::wxt_cairo_create_platform_context()
 
 	FPRINTF((stderr,"wxt_cairo_create_context\n"));
 
-	/* free hdc and hbm */
 	wxt_cairo_free_platform_context();
 
 	/* GetHDC is a wxMSW specific wxDC method that returns
 	 * the HDC on which painting should be done */
-
-	/* Create a compatible DC. */
-	hdc = CreateCompatibleDC( (HDC) dc.GetHDC() );
-
-	if (!hdc)
-		return 1;
-
-	/* Create a bitmap big enough for our client rectangle. */
-	hbm = CreateCompatibleBitmap((HDC) dc.GetHDC(), plot.device_xmax, plot.device_ymax);
-
-	if ( !hbm )
-		return 1;
-
-	/* Select the bitmap into the off-screen DC. */
-	SelectObject(hdc, hbm);
-	surface = cairo_win32_surface_create( hdc );
+	surface = cairo_win32_surface_create_with_ddb(
+		(HDC) dc.GetHDC(), CAIRO_FORMAT_RGB24, 
+		plot.device_xmax, plot.device_ymax);
 	plot.cr = cairo_create(surface);
-	cairo_surface_destroy( surface );
+	cairo_surface_destroy(surface);
 	return 0;
 }
 
 void wxtPanel::wxt_cairo_free_platform_context()
 {
-	if (hdc)
-		DeleteDC(hdc);
-	if (hbm)
-		DeleteObject(hbm);
 }
 
 #else /* generic image surface */

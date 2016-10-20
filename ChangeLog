@@ -1,3 +1,87 @@
+2016-10-18  Ethan A Merritt  <merritt@u.washington.edu>
+
+	* src/parse.h src/parse.c:  Simplify the code that supports iteration.
+	Part 4:  Iteration list no longer needs to be double-linked.
+
+2016-10-17  Ethan A Merritt  <merritt@u.washington.edu>
+
+	* src/parse.h src/parse.c:  Simplify the code that supports iteration.
+	Part 1:  Do not try to pre-calculate and flag empty iterations.
+
+	* src/parse.c:  Simplify the code that supports iteration.
+	Part 2:  Do not pre-calculate whether an iteration is "just once".
+
+	* src/parse.h src/parse.c:  Simplify the code that supports iteration.
+	Part 3:  Re-write next_iteration() to use recursion.
+
+	* src/parse.h src/parse.c demo/iterate.dem:  Dynamic reevaluation of
+	iteration limits.  Allows inner loop to reference variable from outer
+	loop:  E.g.    for [i=1:N] for [j=i:i+1] f(i,j)
+	Bug #1817
+
+2016-10-15  Bastian Maerkisch  <bmaerkisch@web.de>
+
+	* src/command.c (timed_pause) src/stdfn.h (GP_SLEEP):  Enforce usage of
+	win_sleep() even if usleep() is available.
+	Bug #1867
+
+2016-10-13  Ethan A Merritt  <merritt@u.washington.edu>
+
+	* src/wxterminal/wxt_gui.cpp:  Screen refresh must hold mutex lock,
+	failure is triggered by resizing active plot window by dragging mouse.
+	Bug #1845.
+
+2016-10-10  Ethan A Merritt  <merritt@u.washington.edu>
+
+	* src/eval.c src/save.c src/set.c src/show.c src/tables.c src/tables.h
+	src/unset.c src/util.c src/util.h demo/special_chars.dem:
+
+	New command "set micro" tells gnuplot to use an encoding-specific
+	character sequence rather than "u" for the micro sign (unicode U+00B5)
+	used as a prefix in scientific notation.  This affects the "%c" format
+	used by gprintf() to label axis ticks.
+
+2016-10-08  Bastian Maerkisch  <bmaerkisch@web.de>
+
+	* src/win/wgraph.c src/win/wmenu.c src/win/wtext.c:  Argument of the
+	function ShowWindow is not a boolean.
+
+	* src/win/wgdiplus.cpp:  Enable antialiasing for polygons without
+	seams:  Draw a run of filled polygons to a bitmap four times as large
+	as the canvas and scale down with interpolation.
+
+	* src/color.c src/term_api.h:  Add layer calls for color box.
+
+	* src/win/wgdiplus.cpp (W_image):  Draw images with GDI+ using nearest
+	neighbour interpolation.
+
+	* src/wxterminal/wxt_gui.cpp|h (wxt_cairo_create_platform_context):
+	Let cairo manage the Windows GDI bitmap internally. Requires cairo 1.4.
+
+	* src/wxterminal/wxt_gui.cpp (OnPrint):  Use wxDC::GetHDC() instead of
+	GetHandle() since that is also available in wxWidgets 2.8.
+
+	* src/win/wgraph.c (drawgraph):  Missed to recreate the brush in case
+	of fractional solid fill was requested. Bugfix.
+
+2016-10-06  Shigeharu Takeno  <shige@iee.niit.ac.jp>
+
+	* docs/gnuplot.doc:  Fill in missing function definitions for "help"
+	output.
+
+2016-10-05  Ethan A Merritt  <merritt@u.washington.edu>
+
+	* docs/gnuplot.doc docs/plotstyles.gnu src/save.c:  Refer to the plot
+	style as "boxxyerror" rather than "boxxyerrorbars" to reduce confusion
+	arising from the style not drawing bars of any sort.
+
+2016-10-04  Hans-Bernhard Broeker  <broeker@physik.rwth-aachen.de>
+
+	* src/win/wprinter.c: Has to include syscfg.h if definition of
+	WINVER in there is to make any difference.
+
+	* src/win/wpause.c: Dito.
+
 2016-10-03 Allin Cottrell  <cottrell@wfu.edu>
 
 	* src/win/wprinter.c:  Cross-compilation requires lower case include
@@ -5,9 +89,9 @@
 
 2016-10-03  Bastian Maerkisch  <bmaerkisch@web.de>
 
-	* src/win/wgdiplus.cpp src/win/wgraph:  Implement oversampling for the
+	* src/win/wgdiplus.cpp src/win/wgraph.c: Implement oversampling for the
 	GDI+ windows terminal, i.e. draw diagonal lines at fractional pixel
-	positions to avoid "wobbling" effects.   Vertical or horizontal lines
+	positions to avoid "wobbling" effects.  Vertical or horizontal lines
 	and point symbols are still snapped to the nearest pixel to avoid
 	blurry lines.  Replaces the old "oversampling" method which drew on a
 	bitmap four times as large and then scaled down.
@@ -16,14 +100,14 @@
 
 2016-10-01  Ethan A Merritt  <merritt@u.washington.edu>
 
-	* src/term.c (enhanced_recursion):
-	The enhanced text code was eating any whitespace that followed an opening '{'.
-	While this may not be noticeable in most cases, it breaks using the &{space}
-	syntax to create or reproduce blank space in an enhanced text string.
-	Possibly the idea was to allow  "{  /FontName text-in-new-font }" but the
-	documentation has specifically disallowed this for many years.
-	Remove the offending loop that eats whitespace.
-	Bug #1863
+	* src/term.c (enhanced_recursion): The enhanced text code was
+	eating any whitespace that followed an opening '{'.  While this
+	may not be noticeable in most cases, it breaks using the &{space}
+	syntax to create or reproduce blank space in an enhanced text
+	string.  Possibly the idea was to allow "{ /FontName
+	text-in-new-font }" but the documentation has specifically
+	disallowed this for many years.  Remove the offending loop that
+	eats whitespace.  Bug #1863
 
 	* src/boundary.c: Revised placement of x2label.
 
@@ -37,12 +121,12 @@
 
 2016-09-28  Bastian Maerkisch  <bmaerkisch@web.de>
 
-	* src/mousecmn.h src/qtterminal/qt_term.cpp 
-	src/qtterminal/QtGnuplotEvent.h src/qtterminal/QtGnuplotWindow.cpp|h:
-	Enable space-raises-console and terminal option "raise" for qt on
-	Windows.  Since gnuplot and the qt terminal are realized as two
-	different processes, the currently active process has to allow the other
-	to "raise" itself.
+	* src/mousecmn.h src/qtterminal/qt_term.cpp
+	src/qtterminal/QtGnuplotEvent.h
+	src/qtterminal/QtGnuplotWindow.cpp|h: Enable space-raises-console
+	and terminal option "raise" for qt on Windows.  Since gnuplot and
+	the qt terminal are realized as two different processes, the
+	currently active process has to allow the other to "raise" itself.
 
 	* src/win/winmain.c:  Change only the state of minimised windows when
 	raising text or graph windows.  In particular that does leave
@@ -424,7 +508,7 @@
 	
 	* src/readline.c (getc_wrapper):  Clear errno before reading next
 	character.  This fix contributed anonymously.
-	Bug #1846
+	Bug #1846 #1865
 
 2016-08-19  Ethan A Merritt  <merritt@u.washington.edu>
 
